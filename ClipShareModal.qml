@@ -15,12 +15,14 @@ DankModal {
     closeOnEscapeKey: false
     closeOnBackgroundClick: false
     modalWidth: 500
-    modalHeight: 210
+    modalHeight: 290
     shouldHaveFocus: true
 
     function openFor(path) {
         videoPath = path
         state = "ready"
+        if (daemon)
+            daemon.compressionError = ""
         shouldBeVisible = true
         open()
     }
@@ -54,6 +56,30 @@ DankModal {
         })
     }
 
+    function compressRecording() {
+        if (state !== "ready" || !daemon)
+            return
+        state = "compressing"
+        daemon.startLocalCompression(videoPath, (success, path) => {
+            if (path)
+                videoPath = path
+            if (success)
+                closePanel()
+            else
+                state = "ready"
+        })
+    }
+
+    function compressionLabel() {
+        if (state !== "compressing")
+            return "Compress below 10 MB"
+        if (daemon && daemon.compressionStage === "checking")
+            return "Checking recording..."
+        if (daemon && daemon.compressionStage === "copying-file")
+            return "Copying compressed recording..."
+        return "Compressing recording - " + (daemon ? daemon.compressionProgress : 0) + "%"
+    }
+
     onOpened: Qt.callLater(function() {
         if (contentLoader.item)
             contentLoader.item.forceActiveFocus()
@@ -72,6 +98,9 @@ DankModal {
                     event.accepted = true
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     root.copyOriginal()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Space) {
+                    root.compressRecording()
                     event.accepted = true
                 }
             }
@@ -150,11 +179,77 @@ DankModal {
                     }
                 }
 
+                Rectangle {
+                    width: parent.width
+                    height: 64
+                    radius: Theme.cornerRadius
+                    color: compressArea.containsMouse ? Theme.surfaceHover : Theme.surfaceVariantAlpha
+                    opacity: root.state === "ready" || root.state === "compressing" ? 1 : 0.6
+
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.right: compressShortcut.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Theme.spacingM
+                        anchors.rightMargin: Theme.spacingM
+                        text: root.compressionLabel()
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.weight: Font.Medium
+                        color: Theme.surfaceText
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        id: compressShortcut
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.spacingM
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: compressKeyLabel.implicitWidth + Theme.spacingM
+                        height: compressKeyLabel.implicitHeight + Theme.spacingXS
+                        radius: Theme.cornerRadiusSmall
+                        color: Theme.surfaceContainerHigh
+
+                        StyledText {
+                            id: compressKeyLabel
+                            anchors.centerIn: parent
+                            text: "Space"
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Medium
+                            color: Theme.surfaceText
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 4
+                        radius: 2
+                        visible: root.state === "compressing"
+                        color: Theme.surfaceContainerHigh
+
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, (root.daemon ? root.daemon.compressionProgress : 0) / 100))
+                            height: parent.height
+                            radius: parent.radius
+                            color: Theme.primary
+                        }
+                    }
+
+                    MouseArea {
+                        id: compressArea
+                        anchors.fill: parent
+                        enabled: root.state === "ready"
+                        onClicked: root.compressRecording()
+                    }
+                }
+
                 StyledText {
                     width: parent.width
-                    text: "Esc discards this recording."
+                    text: root.daemon && root.daemon.compressionError ? root.daemon.compressionError : "Esc discards this recording."
                     font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.surfaceVariantText
+                    color: root.daemon && root.daemon.compressionError ? Theme.error : Theme.surfaceVariantText
+                    elide: Text.ElideRight
                 }
             }
         }

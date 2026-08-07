@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -u
+
+ffmpeg_bin="${FFMPEG_BIN:-ffmpeg}"
+ffprobe_bin="${FFPROBE_BIN:-ffprobe}"
+runtime_dir="${CLIPSHARE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}/clipshare}"
+limit_bytes="${CLIPSHARE_LOCAL_LIMIT_BYTES:-10000000}"
+target_bytes="${CLIPSHARE_LOCAL_TARGET_BYTES:-9500000}"
+audio_bitrate=64000
+compression_work_dir=""
+
+cleanup() {
+    [ -z "$compression_work_dir" ] || rm -rf -- "$compression_work_dir"
+}
+
+trap cleanup EXIT
+
+fail() {
+    printf 'error\t%s\n' "$1"
+    exit 1
+}
+
+local_compress() {
+    local video_path="${2:-}"
+    case "$video_path" in
+        /*.mp4) ;;
+        *) fail "Expected an absolute MP4 path" ;;
+    esac
+    [ -f "$video_path" ] || fail "Recording is missing"
+
+    printf 'stage\tchecking\n'
+
+    local duration
+    duration="$($ffprobe_bin -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$video_path" 2>/dev/null)" || fail "Could not read recording duration"
+    awk -v duration="$duration" 'BEGIN { exit !(duration > 0) }' || fail "Recording duration is invalid"
+
+    mkdir -p -- "$runtime_dir" || fail "Could not create compression workspace"
+    chmod 700 -- "$runtime_dir" || fail "Could not secure compression workspace"
+
+    local passlog temp_path compact_path video_bitrate video_filter encoder_pid progress_fd
+    compression_work_dir="$(mktemp -d "${runtime_dir}/compress.XXXXXX")" || fail "Could not create compression workspace"
+    passlog="${compression_work_dir}/pass"
+    temp_path="${compression_work_dir}/output.mp4"
+    compact_path="${video_path%.mp4}_small.mp4"
+    video_bitrate="$(awk -v bytes="$target_bytes" -v duration="$duration" -v audio="$audio_bitrate" 'BEGIN { bitrate = int((bytes * 8 / duration) - audio); print bitrate < 100000 ? 100000 : bitrate }')"
+    video_filter="scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30"
+
+    printf 'stage\tcompressing\n'
+
+    "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
+        -map 0:v:0 -vf "$video_filter" -an -pix_fmt yuv420p \
+        -c:v libsvtav1 -preset 4 -svtav1-params tune=0 -b:v "$video_bitrate" \
+        -pass 1 -passlogfile "$passlog" -f null /dev/null || fail "Compression pass 1 failed"
+
+    coproc CLIPSHARE_ENCODER {
+        "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
+            -map 0:v:0 -map '0:a?' -vf "$video_filter" -pix_fmt yuv420p \
+            -c:v libsvtav1 -preset 4 -svtav1-params tune=0 -b:v "$video_bitrate" \
+            -pass 2 -passlogfile "$passlog" -c:a aac -b:a 64k -movflags +faststart \
+            -progress pipe:1 -nostats "$temp_path"
+    }
+    encoder_pid="$CLIPSHARE_ENCODER_PID"
+    exec {progress_fd}<&"${CLIPSHARE_ENCODER[0]}" || fail "Could not read compression progress"
+
+    local key value percent
+    while IFS='=' read -r key value <&"$progress_fd"; do
+        if [ "$key" = "out_time_us" ]; then
+            percent="$(awk -v elapsed="$value" -v duration="$duration" 'BEGIN { percent = int(elapsed / (duration * 10000)); print (percent > 99 ? 99 : percent) }')"
+            printf 'progress\t%s\n' "$percent"
+        fi
+    done
+    exec {progress_fd}<&-
+    wait "$encoder_pid" || fail "Compression pass 2 failed"
+    printf 'progress\t100\n'
+
+    [ -s "$temp_path" ] || fail "Compressed recording is empty"
+    local output_codec
+    output_codec="$($ffprobe_bin -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$temp_path" 2>/dev/null)" || fail "Compressed recording is invalid"
+    [ "$output_codec" = "av1" ] || fail "Compressed recording is not AV1"
+
+    local output_size
+    output_size="$(stat -c %s -- "$temp_path")" || fail "Could not read compressed recording size"
+    [ "$output_size" -lt "$limit_bytes" ] || fail "Compressed recording is not below 10 MB"
+
+    mv -f -- "$temp_path" "$compact_path" || fail "Could not save compressed recording"
+    rm -f -- "$video_path" || fail "Compressed recording succeeded, but the original could not be removed"
+    [ ! -e "$video_path" ] || fail "Compressed recording succeeded, but the original could not be removed"
+    printf 'compressed\t%s\n' "$compact_path"
+}
+
+case "${1:-}" in
+    local-compress)
+        local_compress "$@"
+        ;;
+    *)
+        fail "Usage: clipshare-process local-compress <absolute-video-path>"
+        ;;
+esac
