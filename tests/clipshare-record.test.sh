@@ -86,8 +86,10 @@ IFS=$'\t' read -r _ _ mkv_path < "$state_file"
 
 ready="$(run)"
 assert_contains "$ready" "ready"
-mp4_path="${ready#*$'\t'}"
+IFS=$'\t' read -r event mp4_path mp4_size <<< "$ready"
+[[ "$event" = "ready" ]]
 [[ -s "$mp4_path" ]]
+[[ "$mp4_size" = "$(stat -c %s "$mp4_path")" ]]
 [[ ! -e "$mkv_path" ]]
 [[ ! -e "$state_file" ]]
 

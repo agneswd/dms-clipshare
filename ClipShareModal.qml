@@ -8,6 +8,7 @@ DankModal {
 
     property var daemon: null
     property string videoPath: ""
+    property real videoSizeBytes: 0
     property string state: "ready"
 
     layerNamespace: "dms:plugins:clipShare"
@@ -18,8 +19,9 @@ DankModal {
     modalHeight: 290
     shouldHaveFocus: true
 
-    function openFor(path) {
+    function openFor(path, sizeBytes) {
         videoPath = path
+        videoSizeBytes = sizeBytes
         state = "ready"
         if (daemon)
             daemon.compressionError = ""
@@ -60,9 +62,11 @@ DankModal {
         if (state !== "ready" || !daemon)
             return
         state = "compressing"
-        daemon.startLocalCompression(videoPath, (success, path) => {
-            if (path)
+        daemon.startLocalCompression(videoPath, (success, path, sizeBytes) => {
+            if (path) {
                 videoPath = path
+                videoSizeBytes = sizeBytes
+            }
             if (success)
                 closePanel()
             else
@@ -78,6 +82,16 @@ DankModal {
         if (daemon && daemon.compressionStage === "copying-file")
             return "Copying compressed recording..."
         return "Compressing recording - " + (daemon ? daemon.compressionProgress : 0) + "%"
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes >= 1000000000)
+            return (bytes / 1000000000).toFixed(1) + " GB"
+        if (bytes >= 1000000)
+            return (bytes / 1000000).toFixed(1) + " MB"
+        if (bytes >= 1000)
+            return (bytes / 1000).toFixed(1) + " KB"
+        return bytes + " B"
     }
 
     onOpened: Qt.callLater(function() {
@@ -117,12 +131,25 @@ DankModal {
                     color: Theme.surfaceText
                 }
 
-                StyledText {
+                Row {
                     width: parent.width
-                    text: root.videoPath.split("/").pop()
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.surfaceVariantText
-                    elide: Text.ElideMiddle
+                    spacing: Theme.spacingS
+
+                    StyledText {
+                        width: parent.width - sizeLabel.implicitWidth - parent.spacing
+                        text: root.videoPath.split("/").pop()
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.surfaceVariantText
+                        elide: Text.ElideMiddle
+                    }
+
+                    StyledText {
+                        id: sizeLabel
+                        text: root.formatFileSize(root.videoSizeBytes)
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Medium
+                        color: Theme.surfaceVariantText
+                    }
                 }
 
                 Rectangle {

@@ -23,6 +23,7 @@ PluginComponent {
     property string compressionStage: ""
     property int compressionProgress: 0
     property string compressionResult: ""
+    property real compressionResultSize: 0
     property string compressionError: ""
     property var compressionCallback: null
 
@@ -53,7 +54,7 @@ PluginComponent {
         if (event === "started") {
             toastInfo("Recording started. Press Shift+Print to finish.")
         } else if (event === "ready" && fields[1]) {
-            completionPanel.openFor(fields[1])
+            completionPanel.openFor(fields[1], Number(fields[2]) || 0)
         } else if (event === "cancelled") {
             toastInfo("Recording cancelled")
         } else if (event === "error") {
@@ -93,13 +94,14 @@ PluginComponent {
 
     function startLocalCompression(path, callback) {
         if (!path || compressionProcess.running) {
-            callback(false, "")
+            callback(false, "", 0)
             return
         }
 
         compressionStage = "checking"
         compressionProgress = 0
         compressionResult = ""
+        compressionResultSize = 0
         compressionError = ""
         compressionCallback = callback
         compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path]
@@ -116,6 +118,7 @@ PluginComponent {
             compressionProgress = Math.max(0, Math.min(100, Number(fields[1]) || 0))
         } else if (event === "compressed") {
             compressionResult = fields[1] || ""
+            compressionResultSize = Number(fields[2]) || 0
         } else if (event === "error") {
             compressionError = fields.slice(1).join(" ")
         }
@@ -191,7 +194,7 @@ PluginComponent {
 
             if (exitCode !== 0 || !root.compressionResult) {
                 root.toastError(root.compressionError || "Could not compress recording")
-                callback(false, "")
+                callback(false, "", 0)
                 return
             }
 
@@ -200,7 +203,7 @@ PluginComponent {
             root.copyLocalFile(result, success => {
                 if (!success)
                     root.compressionError = "The compressed recording is safe, but clipboard copy failed"
-                callback(success, result)
+                callback(success, result, root.compressionResultSize)
             })
         }
     }

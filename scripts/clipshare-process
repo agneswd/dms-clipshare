@@ -85,7 +85,7 @@ local_compress() {
     mv -f -- "$temp_path" "$compact_path" || fail "Could not save compressed recording"
     rm -f -- "$video_path" || fail "Compressed recording succeeded, but the original could not be removed"
     [ ! -e "$video_path" ] || fail "Compressed recording succeeded, but the original could not be removed"
-    printf 'compressed\t%s\n' "$compact_path"
+    printf 'compressed\t%s\t%s\n' "$compact_path" "$output_size"
 }
 
 case "${1:-}" in

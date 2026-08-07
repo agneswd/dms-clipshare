@@ -61,9 +61,14 @@ assert_contains "$success" $'progress\t50'
 assert_contains "$success" $'progress\t100'
 assert_contains "$success" $'compressed\t'
 compact="${original%.mp4}_small.mp4"
+compressed_line="${success##*$'\n'}"
+IFS=$'\t' read -r event compressed_path compressed_size <<< "$compressed_line"
+[[ "$event" = "compressed" ]]
+[[ "$compressed_path" = "$compact" ]]
 [[ ! -e "$original" ]]
 [[ -s "$compact" ]]
 [[ "$(stat -c %s "$compact")" -lt 10000 ]]
+[[ "$compressed_size" = "$(stat -c %s "$compact")" ]]
 
 failed_original="$tmp_dir/failed.mp4"
 printf 'keep me\n' > "$failed_original"

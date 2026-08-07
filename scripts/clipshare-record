@@ -63,7 +63,7 @@ start_recording() {
 }
 
 stop_recording() {
-    local pid expected_ticks mkv_path actual_ticks mp4_path tries=0
+    local pid expected_ticks mkv_path actual_ticks mp4_path file_size tries=0
     IFS=$'\t' read -r pid expected_ticks mkv_path < "$state_file" || {
         clear_state
         start_recording
@@ -90,7 +90,8 @@ stop_recording() {
     "$ffmpeg_bin" -nostdin -i "$mkv_path" -c copy -y "$mp4_path" -loglevel error || fail "Could not finalize recording"
     [ -s "$mp4_path" ] || fail "Finalized recording is missing"
     rm -f -- "$mkv_path"
-    printf 'ready\t%s\n' "$mp4_path"
+    file_size="$(stat -c %s -- "$mp4_path")" || fail "Could not read finalized recording size"
+    printf 'ready\t%s\t%s\n' "$mp4_path" "$file_size"
 }
 
 discard_recording() {
