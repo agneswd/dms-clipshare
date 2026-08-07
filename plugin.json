@@ -9,6 +9,7 @@
   "type": "daemon",
   "capabilities": ["daemon"],
   "component": "./ClipShareDaemon.qml",
+  "settings": "./ClipShareSettings.qml",
   "requires_dms": ">=1.5.2",
   "requires": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl"],
   "permissions": ["settings_read", "settings_write", "shell_execute"]

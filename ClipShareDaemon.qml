@@ -25,7 +25,14 @@ PluginComponent {
     property string compressionResult: ""
     property real compressionResultSize: 0
     property string compressionError: ""
-    property var compressionCallback: null
+    property string operationState: "idle"
+    property string operationFilePath: ""
+    property real operationFileSize: 0
+    readonly property string operationFileName: operationFilePath ? operationFilePath.split("/").pop() : ""
+    readonly property string progressPosition: {
+        const value = pluginData.progressPosition || "top-right"
+        return ["top-right", "top-left", "bottom-right", "bottom-left"].includes(value) ? value : "top-right"
+    }
 
     function toastInfo(message) {
         if (typeof ToastService !== "undefined" && ToastService)
@@ -92,20 +99,22 @@ PluginComponent {
         discardProcess.running = true
     }
 
-    function startLocalCompression(path, callback) {
-        if (!path || compressionProcess.running) {
-            callback(false, "", 0)
-            return
-        }
+    function startLocalCompression(path, sizeBytes) {
+        if (!path || compressionProcess.running)
+            return false
 
         compressionStage = "checking"
         compressionProgress = 0
         compressionResult = ""
         compressionResultSize = 0
         compressionError = ""
-        compressionCallback = callback
+        operationState = "working"
+        operationFilePath = path
+        operationFileSize = sizeBytes
+        progressHud.targetScreen = CompositorService.getFocusedScreen()
         compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path]
         compressionProcess.running = true
+        return true
     }
 
     function handleCompressionLine(line) {
@@ -122,6 +131,14 @@ PluginComponent {
         } else if (event === "error") {
             compressionError = fields.slice(1).join(" ")
         }
+    }
+
+    function reopenFailedOperation() {
+        if (operationState !== "error" || !operationFilePath)
+            return
+        const message = compressionError
+        operationState = "idle"
+        completionPanel.openFor(operationFilePath, operationFileSize, message)
     }
 
     Process {
@@ -187,24 +204,35 @@ PluginComponent {
         }
 
         onExited: exitCode => {
-            const callback = root.compressionCallback
-            root.compressionCallback = null
-            if (!callback)
-                return
-
             if (exitCode !== 0 || !root.compressionResult) {
                 root.toastError(root.compressionError || "Could not compress recording")
-                callback(false, "", 0)
+                root.operationState = "error"
                 return
             }
 
             root.compressionStage = "copying-file"
             const result = root.compressionResult
+            root.operationFilePath = result
+            root.operationFileSize = root.compressionResultSize
             root.copyLocalFile(result, success => {
-                if (!success)
+                if (!success) {
                     root.compressionError = "The compressed recording is safe, but clipboard copy failed"
-                callback(success, result, root.compressionResultSize)
+                    root.operationState = "error"
+                    return
+                }
+                root.operationState = "success"
+                successHideTimer.restart()
             })
+        }
+    }
+
+    Timer {
+        id: successHideTimer
+        interval: 2500
+        repeat: false
+        onTriggered: {
+            if (root.operationState === "success")
+                root.operationState = "idle"
         }
     }
 
@@ -220,6 +248,11 @@ PluginComponent {
 
     ClipShareModal {
         id: completionPanel
+        daemon: root
+    }
+
+    ClipShareProgress {
+        id: progressHud
         daemon: root
     }
 }

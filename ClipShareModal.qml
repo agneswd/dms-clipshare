@@ -10,6 +10,7 @@ DankModal {
     property string videoPath: ""
     property real videoSizeBytes: 0
     property string state: "ready"
+    property string errorMessage: ""
 
     layerNamespace: "dms:plugins:clipShare"
     keepPopoutsOpen: true
@@ -19,12 +20,11 @@ DankModal {
     modalHeight: 290
     shouldHaveFocus: true
 
-    function openFor(path, sizeBytes) {
+    function openFor(path, sizeBytes, message) {
         videoPath = path
         videoSizeBytes = sizeBytes
         state = "ready"
-        if (daemon)
-            daemon.compressionError = ""
+        errorMessage = message || ""
         shouldBeVisible = true
         open()
     }
@@ -61,27 +61,8 @@ DankModal {
     function compressRecording() {
         if (state !== "ready" || !daemon)
             return
-        state = "compressing"
-        daemon.startLocalCompression(videoPath, (success, path, sizeBytes) => {
-            if (path) {
-                videoPath = path
-                videoSizeBytes = sizeBytes
-            }
-            if (success)
-                closePanel()
-            else
-                state = "ready"
-        })
-    }
-
-    function compressionLabel() {
-        if (state !== "compressing")
-            return "Compress below 10 MB"
-        if (daemon && daemon.compressionStage === "checking")
-            return "Checking recording..."
-        if (daemon && daemon.compressionStage === "copying-file")
-            return "Copying compressed recording..."
-        return "Compressing recording - " + (daemon ? daemon.compressionProgress : 0) + "%"
+        if (daemon.startLocalCompression(videoPath, videoSizeBytes))
+            closePanel()
     }
 
     function formatFileSize(bytes) {
@@ -208,10 +189,10 @@ DankModal {
 
                 Rectangle {
                     width: parent.width
-                    height: 64
+                    height: 56
                     radius: Theme.cornerRadius
                     color: compressArea.containsMouse ? Theme.surfaceHover : Theme.surfaceVariantAlpha
-                    opacity: root.state === "ready" || root.state === "compressing" ? 1 : 0.6
+                    opacity: root.state === "ready" ? 1 : 0.6
 
                     StyledText {
                         anchors.left: parent.left
@@ -219,7 +200,7 @@ DankModal {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: Theme.spacingM
                         anchors.rightMargin: Theme.spacingM
-                        text: root.compressionLabel()
+                        text: "Compress below 10 MB"
                         font.pixelSize: Theme.fontSizeMedium
                         font.weight: Font.Medium
                         color: Theme.surfaceText
@@ -246,23 +227,6 @@ DankModal {
                         }
                     }
 
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 4
-                        radius: 2
-                        visible: root.state === "compressing"
-                        color: Theme.surfaceContainerHigh
-
-                        Rectangle {
-                            width: parent.width * Math.max(0, Math.min(1, (root.daemon ? root.daemon.compressionProgress : 0) / 100))
-                            height: parent.height
-                            radius: parent.radius
-                            color: Theme.primary
-                        }
-                    }
-
                     MouseArea {
                         id: compressArea
                         anchors.fill: parent
@@ -273,9 +237,9 @@ DankModal {
 
                 StyledText {
                     width: parent.width
-                    text: root.daemon && root.daemon.compressionError ? root.daemon.compressionError : "Esc discards this recording."
+                    text: root.errorMessage || "Esc discards this recording."
                     font.pixelSize: Theme.fontSizeSmall
-                    color: root.daemon && root.daemon.compressionError ? Theme.error : Theme.surfaceVariantText
+                    color: root.errorMessage ? Theme.error : Theme.surfaceVariantText
                     elide: Text.ElideRight
                 }
             }
