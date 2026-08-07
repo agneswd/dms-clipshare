@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -u
+
+runtime_dir="${CLIPSHARE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}/clipshare}"
+record_dir="${CLIPSHARE_RECORD_DIR:-${HOME}/Videos/Screencasts}"
+state_file="${runtime_dir}/recording.state"
+gsr_bin="${GSR_BIN:-gpu-screen-recorder}"
+slurp_bin="${SLURP_BIN:-slurp}"
+ffmpeg_bin="${FFMPEG_BIN:-ffmpeg}"
+pactl_bin="${PACTL_BIN:-pactl}"
+stop_signal="${CLIPSHARE_STOP_SIGNAL:-INT}"
+
+emit() {
+    printf '%s\n' "$1"
+}
+
+fail() {
+    printf 'error\t%s\n' "$1"
+    exit 1
+}
+
+process_start_ticks() {
+    awk '{print $22}' "/proc/$1/stat" 2>/dev/null || true
+}
+
+process_state() {
+    awk '{print $3}' "/proc/$1/stat" 2>/dev/null || true
+}
+
+clear_state() {
+    rm -f -- "$state_file"
+}
+
+start_recording() {
+    mkdir -p -- "$runtime_dir" "$record_dir" || fail "Could not create recording directory"
+    chmod 700 -- "$runtime_dir" || fail "Could not secure recording state"
+
+    local geometry
+    geometry="$(env -u DISPLAY "$slurp_bin" -f '%wx%h+%x+%y' </dev/null)" || true
+    [ -n "$geometry" ] || {
+        emit "cancelled"
+        return
+    }
+
+    local mkv_path sink pid start_ticks
+    mkv_path="${record_dir}/record_$(date +%s%N).mkv"
+    sink="$($pactl_bin get-default-sink 2>/dev/null || true)"
+
+    if [ -n "$sink" ]; then
+        "$gsr_bin" -w region -region "$geometry" -f 60 -a "${sink}.monitor" -o "$mkv_path" >/dev/null 2>&1 &
+    else
+        "$gsr_bin" -w region -region "$geometry" -f 60 -o "$mkv_path" >/dev/null 2>&1 &
+    fi
+    pid=$!
+    start_ticks="$(process_start_ticks "$pid")"
+    [ -n "$start_ticks" ] || {
+        wait "$pid" 2>/dev/null || true
+        fail "GPU Screen Recorder did not start"
+    }
+
+    printf '%s\t%s\t%s\n' "$pid" "$start_ticks" "$mkv_path" > "$state_file" || fail "Could not save recording state"
+    emit "started"
+}
+
+stop_recording() {
+    local pid expected_ticks mkv_path actual_ticks mp4_path tries=0
+    IFS=$'\t' read -r pid expected_ticks mkv_path < "$state_file" || {
+        clear_state
+        start_recording
+        return
+    }
+
+    actual_ticks="$(process_start_ticks "$pid")"
+    if [ -z "$actual_ticks" ] || [ "$actual_ticks" != "$expected_ticks" ]; then
+        clear_state
+        start_recording
+        return
+    fi
+
+    kill -s "$stop_signal" "$pid" 2>/dev/null || fail "Could not stop GPU Screen Recorder"
+    while [ "$(process_start_ticks "$pid")" = "$expected_ticks" ] && [ "$(process_state "$pid")" != "Z" ]; do
+        tries=$((tries + 1))
+        [ "$tries" -lt 150 ] || fail "GPU Screen Recorder did not stop"
+        sleep 0.1
+    done
+
+    clear_state
+    [ -s "$mkv_path" ] || fail "Recording output is missing"
+    mp4_path="${mkv_path%.mkv}.mp4"
+    "$ffmpeg_bin" -nostdin -i "$mkv_path" -c copy -y "$mp4_path" -loglevel error || fail "Could not finalize recording"
+    [ -s "$mp4_path" ] || fail "Finalized recording is missing"
+    rm -f -- "$mkv_path"
+    printf 'ready\t%s\n' "$mp4_path"
+}
+
+discard_recording() {
+    local video_path="${2:-}"
+    case "$video_path" in
+        "$record_dir"/record_*.mp4) ;;
+        *) fail "Refusing to discard a file outside ClipShare recordings" ;;
+    esac
+
+    [ -f "$video_path" ] || fail "Recording is already missing"
+    rm -f -- "$video_path" || fail "Could not discard recording"
+    [ ! -e "$video_path" ] || fail "Could not discard recording"
+    printf 'discarded\t%s\n' "$video_path"
+}
+
+case "${1:-}" in
+    toggle)
+        if [ -f "$state_file" ]; then
+            stop_recording
+        else
+            start_recording
+        fi
+        ;;
+    discard)
+        discard_recording "$@"
+        ;;
+    *)
+        fail "Usage: clipshare-record toggle|discard <absolute-video-path>"
+        ;;
+esac

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://github.com/AvengeMedia/DankMaterialShell/raw/refs/heads/master/PLUGINS/plugin-schema.json",
+  "id": "clipShare",
+  "name": "ClipShare",
+  "description": "Record a screen region and choose how to share the finished clip.",
+  "version": "0.1.0",
+  "author": "master",
+  "icon": "videocam",
+  "type": "daemon",
+  "capabilities": ["daemon"],
+  "component": "./ClipShareDaemon.qml",
+  "requires_dms": ">=1.5.2",
+  "requires": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl"],
+  "permissions": ["settings_read", "settings_write", "shell_execute"]
+}
