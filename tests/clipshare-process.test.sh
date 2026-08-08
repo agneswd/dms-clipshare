@@ -70,7 +70,7 @@ run_process() {
     FFPROBE_BIN="$tmp_dir/bin/ffprobe" \
     FAKE_ARGS_LOG="$tmp_dir/ffmpeg-args" \
     CLIPSHARE_VAAPI_DEVICE="${CLIPSHARE_VAAPI_DEVICE:-/dev/dri/renderD128}" \
-    "$script" local-compress "$1" "${2:-balanced}"
+    "$script" local-compress "$1" "${2:-balanced}" "${3:-}"
 }
 
 run_share() {
@@ -137,9 +137,25 @@ oversize="$(FAKE_OUTPUT_SIZE=10000 run_process "$oversize_original" 2>&1)"
 status=$?
 set -e
 [[ "$status" -ne 0 ]]
-assert_contains "$oversize" $'error\tCompressed recording is not below 10 MB'
+assert_contains "$oversize" $'error\tCompressed recording is not below the configured size limit'
 [[ -s "$oversize_original" ]]
 [[ ! -e "${oversize_original%.mp4}_small.mp4" ]]
+
+custom_limit_original="$tmp_dir/custom-limit.mp4"
+printf 'custom limit\n' > "$custom_limit_original"
+custom_limit_success="$(FAKE_OUTPUT_SIZE=1900000 run_process "$custom_limit_original" balanced 2)"
+assert_contains "$custom_limit_success" $'compressed\t'
+assert_contains "$(tail -2 "$tmp_dir/ffmpeg-args")" "-b:v 189333"
+
+invalid_limit_original="$tmp_dir/invalid-limit.mp4"
+printf 'invalid limit\n' > "$invalid_limit_original"
+set +e
+invalid_limit="$(run_process "$invalid_limit_original" balanced 0 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]]
+assert_contains "$invalid_limit" $'error\tCompression size limit must be between 1 and 100 MB'
+[[ -s "$invalid_limit_original" ]]
 
 invalid_original="$tmp_dir/invalid.mp4"
 printf 'keep me three\n' > "$invalid_original"

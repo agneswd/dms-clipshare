@@ -38,6 +38,11 @@ PluginComponent {
         const value = pluginData.compressionMode || "balanced"
         return ["best", "balanced", "gpu"].includes(value) ? value : "balanced"
     }
+    readonly property int compressionLimitMb: {
+        const value = Number(pluginData.compressionLimitMb)
+        return Number.isInteger(value) && value >= 1 && value <= 100 ? value : 10
+    }
+    readonly property int compressionLimitBytes: compressionLimitMb * 1000000
     readonly property string uploadMode: pluginData.uploadMode === "catbox" ? "catbox" : "embed"
 
     function validShortcutKey(value) {
@@ -144,7 +149,7 @@ PluginComponent {
         if (!path || compressionProcess.running)
             return false
 
-        if (sizeBytes > 0 && sizeBytes < 10000000) {
+        if (sizeBytes > 0 && sizeBytes < compressionLimitBytes) {
             copyLocalFile(path, () => {})
             return true
         }
@@ -159,7 +164,7 @@ PluginComponent {
         operationFilePath = path
         operationFileSize = sizeBytes
         progressHud.targetScreen = CompositorService.getFocusedScreen()
-        compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path, compressionMode]
+        compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path, compressionMode, String(compressionLimitMb)]
         compressionProcess.running = true
         return true
     }

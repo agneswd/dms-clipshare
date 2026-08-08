@@ -319,7 +319,7 @@ DankModal {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: Theme.spacingM
                         anchors.rightMargin: Theme.spacingM
-                        text: "Compress below 10 MB"
+                        text: "Compress below " + (root.daemon ? root.daemon.compressionLimitMb : 10) + " MB"
                         font.pixelSize: Theme.fontSizeMedium
                         font.weight: Font.Medium
                         color: Theme.surfaceText

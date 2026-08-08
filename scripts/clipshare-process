@@ -26,6 +26,7 @@ fail() {
 local_compress() {
     local video_path="${2:-}"
     local compression_mode="${3:-balanced}"
+    local limit_mb="${4:-}"
     case "$video_path" in
         /*.mp4) ;;
         *) fail "Expected an absolute MP4 path" ;;
@@ -35,6 +36,12 @@ local_compress() {
         best|balanced|gpu) ;;
         *) fail "Unknown compression mode" ;;
     esac
+    if [ -n "$limit_mb" ]; then
+        [[ "$limit_mb" =~ ^[0-9]+$ ]] || fail "Compression size limit must be a whole number of MB"
+        [ "$limit_mb" -ge 1 ] && [ "$limit_mb" -le 100 ] || fail "Compression size limit must be between 1 and 100 MB"
+        limit_bytes=$((limit_mb * 1000000))
+        target_bytes=$((limit_bytes * 95 / 100))
+    fi
 
     printf 'stage\tchecking\n'
 
@@ -114,7 +121,7 @@ local_compress() {
 
     local output_size
     output_size="$(stat -c %s -- "$temp_path")" || fail "Could not read compressed recording size"
-    [ "$output_size" -lt "$limit_bytes" ] || fail "Compressed recording is not below 10 MB"
+    [ "$output_size" -lt "$limit_bytes" ] || fail "Compressed recording is not below the configured size limit"
 
     mv -f -- "$temp_path" "$compact_path" || fail "Could not save compressed recording"
     rm -f -- "$video_path" || fail "Compressed recording succeeded, but the original could not be removed"
@@ -229,6 +236,6 @@ case "${1:-}" in
         share_video "$@"
         ;;
     *)
-        fail "Usage: clipshare-process <local-compress|share> <absolute-video-path>"
+        fail "Usage: clipshare-process local-compress <absolute-video-path> [mode] [limit-mb] | share <absolute-video-path> [upload-mode]"
         ;;
 esac

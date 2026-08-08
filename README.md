@@ -9,8 +9,8 @@ ClipShare is a Dank Material Shell plugin for recording a screen region and deci
 - GPU-accelerated region recording through GPU Screen Recorder.
 - Shows the recording filename and size before acting.
 - Copies the original file immediately with Enter.
-- Copies recordings already below 10 MB immediately with Space.
-- Compresses larger recordings below 10 MB with selectable Balanced, Best quality, or Fast GPU AV1 modes.
+- Copies recordings already below the configured size limit immediately with Space.
+- Compresses larger recordings below a configurable size limit with selectable Balanced, Best quality, or Fast GPU AV1 modes. The default limit is 10 MB.
 - Uploads to Catbox and copies either the direct URL or an Autocompressor short embed link.
 - Extracts the first video frame for Autocompressor thumbnails.
 - Moves long-running work into a configurable, non-blocking corner HUD.
@@ -57,7 +57,7 @@ Press the recording shortcut once, select a region, and press it again to finish
 | Default shortcut | Action |
 | --- | --- |
 | `Enter` | Keep and copy the original recording. |
-| `Space` | Copy immediately below 10 MB, otherwise compress below 10 MB and copy. |
+| `Space` | Copy immediately below the configured size limit, otherwise compress below it and copy. |
 | `Space+Enter` | Upload using the selected upload mode and copy the resulting URL. |
 | `Escape` | Discard the recording. |
 
@@ -71,6 +71,8 @@ All shortcuts are configurable. For panel shortcuts, use one named key or letter
 Uploads are public to anyone with the URL. Anonymous Catbox uploads cannot be deleted through ClipShare. A successful upload removes the local recording; an upload failure keeps it.
 
 ## Compression modes
+
+The compression size limit is configurable from 1-100 MB and defaults to 10 MB.
 
 - **Balanced** is the default. It uses two-pass SVT-AV1 preset 6.
 - **Best quality** uses two-pass SVT-AV1 preset 4 and takes longer.

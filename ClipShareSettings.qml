@@ -80,6 +80,16 @@ PluginSettings {
         ]
     }
 
+    SliderSetting {
+        settingKey: "compressionLimitMb"
+        label: "Compression size limit"
+        description: "Recordings below this size are copied without recompression. Larger recordings are compressed below the limit."
+        defaultValue: 10
+        minimum: 1
+        maximum: 100
+        unit: "MB"
+    }
+
     SelectionSetting {
         settingKey: "uploadMode"
         label: "Upload mode"
