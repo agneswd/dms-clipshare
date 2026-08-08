@@ -15,6 +15,7 @@ ClipShare is a Dank Material Shell plugin for recording a screen region and deci
 - Extracts the first video frame for Autocompressor thumbnails.
 - Moves long-running work into a configurable, non-blocking corner HUD.
 - Lets you configure the recording and completion-panel shortcuts.
+- Lets you choose the recording folder, defaulting to `~/Videos/ClipShare`.
 - Deletes local recordings only after successful compression or upload. Failed operations keep the original for retry.
 
 ## Requirements

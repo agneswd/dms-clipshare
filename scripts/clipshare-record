@@ -2,7 +2,17 @@
 set -u
 
 runtime_dir="${CLIPSHARE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}/clipshare}"
-record_dir="${CLIPSHARE_RECORD_DIR:-${HOME}/Videos/Screencasts}"
+case "${1:-}" in
+    toggle) configured_record_dir="${2:-${HOME}/Videos/ClipShare}" ;;
+    discard) configured_record_dir="${3:-${HOME}/Videos/ClipShare}" ;;
+    *) configured_record_dir="${HOME}/Videos/ClipShare" ;;
+esac
+record_dir="${CLIPSHARE_RECORD_DIR:-$configured_record_dir}"
+case "$record_dir" in
+    '~/'*) record_dir="${HOME}/${record_dir#\~/}" ;;
+    /*) ;;
+    *) printf 'error\tRecording folder must be an absolute path or start with ~/\n'; exit 1 ;;
+esac
 state_file="${runtime_dir}/recording.state"
 gsr_bin="${GSR_BIN:-gpu-screen-recorder}"
 slurp_bin="${SLURP_BIN:-slurp}"
@@ -119,6 +129,6 @@ case "${1:-}" in
         discard_recording "$@"
         ;;
     *)
-        fail "Usage: clipshare-record toggle|discard <absolute-video-path>"
+        fail "Usage: clipshare-record toggle [record-folder] | discard <absolute-video-path> [record-folder]"
         ;;
 esac

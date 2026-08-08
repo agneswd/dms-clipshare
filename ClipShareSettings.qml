@@ -98,6 +98,13 @@ PluginSettings {
     }
 
     StringSetting {
+        settingKey: "recordingDirectory"
+        label: "Recording folder"
+        description: "Use an absolute path or a path starting with ~/. The folder is created automatically."
+        defaultValue: "~/Videos/ClipShare"
+    }
+
+    StringSetting {
         settingKey: "copyShortcut"
         label: "Copy shortcut"
         description: "One key, such as Enter or C."

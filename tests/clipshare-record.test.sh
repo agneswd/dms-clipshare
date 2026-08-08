@@ -125,4 +125,16 @@ assert_contains "$failed" "error"
 failed_mkv="$(find "$tmp_dir/recordings" -name '*.mkv' -type f -print -quit)"
 [[ -n "$failed_mkv" && -s "$failed_mkv" ]]
 
+default_runtime="$tmp_dir/default-runtime"
+HOME="$tmp_dir/home" CLIPSHARE_RUNTIME_DIR="$default_runtime" SLURP_BIN="$tmp_dir/bin/slurp-empty" \
+    "$script" toggle >/dev/null
+[[ -d "$tmp_dir/home/Videos/ClipShare" ]]
+
+set +e
+relative_error="$(HOME="$tmp_dir/home" CLIPSHARE_RUNTIME_DIR="$default_runtime" "$script" toggle relative/path 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]]
+assert_contains "$relative_error" "absolute path"
+
 printf 'clipshare-record tests passed\n'

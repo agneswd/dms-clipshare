@@ -61,6 +61,7 @@ PluginComponent {
     readonly property string shareShortcut: chordShortcut(pluginData.shareShortcut)
     readonly property string discardShortcut: singleShortcut(pluginData.discardShortcut, "Escape")
     readonly property string recordShortcut: pluginData.recordShortcut || "Shift+Print"
+    readonly property string recordingDirectory: pluginData.recordingDirectory || "~/Videos/ClipShare"
 
     function toastInfo(message) {
         if (typeof ToastService !== "undefined" && ToastService)
@@ -78,7 +79,7 @@ PluginComponent {
 
         recordError = ""
         recordErrorReported = false
-        recordProcess.command = ["bash", pluginDir + "scripts/clipshare-record", "toggle"]
+        recordProcess.command = ["bash", pluginDir + "scripts/clipshare-record", "toggle", recordingDirectory]
         recordProcess.running = true
     }
 
@@ -135,7 +136,7 @@ PluginComponent {
 
         discardError = ""
         discardCallback = callback
-        discardProcess.command = ["bash", pluginDir + "scripts/clipshare-record", "discard", path]
+        discardProcess.command = ["bash", pluginDir + "scripts/clipshare-record", "discard", path, recordingDirectory]
         discardProcess.running = true
     }
 
