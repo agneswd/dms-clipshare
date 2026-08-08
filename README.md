@@ -21,7 +21,7 @@ ClipShare is a Dank Material Shell plugin for recording a screen region and deci
 ## Requirements
 
 - Dank Material Shell 1.5.2 or newer
-- Niri
+- Niri or Hyprland
 - `gpu-screen-recorder`
 - `ffmpeg` and `ffprobe`
 - `slurp`
@@ -47,6 +47,8 @@ dms restart
 ```
 
 Enable ClipShare in DMS Settings, then set the system-wide recording shortcut from the plugin settings. The default is `Shift+Print`.
+
+Niri is live-tested. Hyprland uses the same DMS-managed keybind flow and is covered by provider-level tests, but has not been live-tested by the author.
 
 ## Usage
 

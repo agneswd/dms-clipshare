@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp_dir"' EXIT
 
 cat > "$tmp_dir/dms" <<'EOF'
 #!/usr/bin/env bash
-if [ "$1 $2 $3" = "keybinds show niri" ]; then
+if [ "$1 $2" = "keybinds show" ]; then
     printf '%s\n' "${FAKE_BINDS:?}"
 else
     printf '%s\n' "$*" > "${FAKE_SET_LOG:?}"
@@ -21,6 +21,10 @@ DMS_BIN="$tmp_dir/dms" FAKE_BINDS="$binds" FAKE_SET_LOG="$tmp_dir/set.log" \
     "$root_dir/scripts/clipshare-keybind" "Mod+Print"
 grep -Fq 'keybinds set niri Mod+Print' "$tmp_dir/set.log"
 grep -Fq -- '--replace-key Shift+Print' "$tmp_dir/set.log"
+
+DMS_BIN="$tmp_dir/dms" FAKE_BINDS="$binds" FAKE_SET_LOG="$tmp_dir/hyprland-set.log" \
+    "$root_dir/scripts/clipshare-keybind" "SUPER+Print" hyprland
+grep -Fq 'keybinds set hyprland SUPER+Print' "$tmp_dir/hyprland-set.log"
 
 conflict_binds='{"binds":{"System":[{"key":"Shift+Print","action":"spawn dms ipc call clipShare toggle"},{"key":"Mod+Print","action":"spawn other"}]}}'
 set +e

@@ -15,7 +15,8 @@ PluginSettings {
         const value = loadValue("recordShortcut", "Shift+Print")
         if (!keybindProcess.running && value !== appliedRecordShortcut) {
             pendingRecordShortcut = value
-            keybindProcess.command = ["bash", Qt.resolvedUrl("scripts/clipshare-keybind").toString().replace("file://", ""), value]
+            const provider = CompositorService.isHyprland ? "hyprland" : "niri"
+            keybindProcess.command = ["bash", Qt.resolvedUrl("scripts/clipshare-keybind").toString().replace("file://", ""), value, provider]
             keybindProcess.running = true
         }
     }
@@ -93,7 +94,7 @@ PluginSettings {
     StringSetting {
         settingKey: "recordShortcut"
         label: "Start/stop recording shortcut"
-        description: "Niri shortcut syntax, such as Shift+Print or Mod+Print. Existing shortcuts cannot be replaced."
+        description: "Niri or Hyprland shortcut syntax, such as Shift+Print or Mod+Print. Existing shortcuts cannot be replaced."
         defaultValue: "Shift+Print"
     }
 
