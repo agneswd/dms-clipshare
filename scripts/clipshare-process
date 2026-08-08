@@ -3,9 +3,12 @@ set -u
 
 ffmpeg_bin="${FFMPEG_BIN:-ffmpeg}"
 ffprobe_bin="${FFPROBE_BIN:-ffprobe}"
+curl_bin="${CURL_BIN:-curl}"
 runtime_dir="${CLIPSHARE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}/clipshare}"
 limit_bytes="${CLIPSHARE_LOCAL_LIMIT_BYTES:-10000000}"
 target_bytes="${CLIPSHARE_LOCAL_TARGET_BYTES:-9500000}"
+share_limit_bytes="${CLIPSHARE_SHARE_LIMIT_BYTES:-200000000}"
+share_target_bytes="${CLIPSHARE_SHARE_TARGET_BYTES:-190000000}"
 audio_bitrate=64000
 compression_work_dir=""
 
@@ -119,11 +122,90 @@ local_compress() {
     printf 'compressed\t%s\t%s\n' "$compact_path" "$output_size"
 }
 
+upload_catbox() {
+    local file_path="$1"
+    local response
+    response="$($curl_bin -fsS --max-time 600 -F reqtype=fileupload -F "fileToUpload=@${file_path}" https://catbox.moe/user/api.php)" || return 1
+    case "$response" in
+        https://files.catbox.moe/*) printf '%s\n' "$response" ;;
+        *) return 2 ;;
+    esac
+}
+
+share_video() {
+    local video_path="${2:-}"
+    case "$video_path" in
+        /*.mp4) ;;
+        *) fail "Expected an absolute MP4 path" ;;
+    esac
+    [ -f "$video_path" ] || fail "Recording is missing"
+
+    printf 'stage\tchecking\n'
+    mkdir -p -- "$runtime_dir" || fail "Could not create sharing workspace"
+    chmod 700 -- "$runtime_dir" || fail "Could not secure sharing workspace"
+    compression_work_dir="$(mktemp -d "${runtime_dir}/share.XXXXXX")" || fail "Could not create sharing workspace"
+
+    local candidate="$video_path"
+    local input_size
+    input_size="$(stat -c %s -- "$video_path")" || fail "Could not read recording size"
+    if [ "$input_size" -ge "$share_limit_bytes" ]; then
+        local duration video_bitrate passlog compressed_path encoder_pid progress_fd key value percent
+        duration="$($ffprobe_bin -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$video_path" 2>/dev/null)" || fail "Could not read recording duration"
+        awk -v duration="$duration" 'BEGIN { exit !(duration > 0) }' || fail "Recording duration is invalid"
+        video_bitrate="$(awk -v bytes="$share_target_bytes" -v duration="$duration" -v audio="$audio_bitrate" 'BEGIN { bitrate = int((bytes * 8 / duration) - audio); print bitrate < 100000 ? 100000 : bitrate }')"
+        passlog="${compression_work_dir}/pass"
+        compressed_path="${compression_work_dir}/upload.mp4"
+        printf 'stage\tcompressing\n'
+        "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
+            -map 0:v:0 -an -pix_fmt yuv420p -c:v libsvtav1 -preset 4 -svtav1-params tune=0 \
+            -b:v "$video_bitrate" -pass 1 -passlogfile "$passlog" -f null /dev/null || fail "Share compression pass 1 failed"
+        coproc CLIPSHARE_SHARE_ENCODER {
+            "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
+                -map 0:v:0 -map '0:a?' -pix_fmt yuv420p -c:v libsvtav1 -preset 4 -svtav1-params tune=0 \
+                -b:v "$video_bitrate" -pass 2 -passlogfile "$passlog" -c:a aac -b:a 64k -movflags +faststart \
+                -progress pipe:1 -nostats "$compressed_path"
+        }
+        encoder_pid="$CLIPSHARE_SHARE_ENCODER_PID"
+        exec {progress_fd}<&"${CLIPSHARE_SHARE_ENCODER[0]}" || fail "Could not read share compression progress"
+        while IFS='=' read -r key value <&"$progress_fd"; do
+            if [ "$key" = "out_time_us" ]; then
+                percent="$(awk -v elapsed="$value" -v duration="$duration" 'BEGIN { percent = int(elapsed / (duration * 10000)); print (percent > 99 ? 99 : percent) }')"
+                printf 'progress\t%s\n' "$percent"
+            fi
+        done
+        exec {progress_fd}<&-
+        wait "$encoder_pid" || fail "Share compression failed"
+        printf 'progress\t100\n'
+        [ -s "$compressed_path" ] || fail "Compressed share copy is empty"
+        [ "$(stat -c %s -- "$compressed_path")" -lt "$share_limit_bytes" ] || fail "Compressed share copy is not below 200 MB"
+        candidate="$compressed_path"
+    fi
+
+    local dimensions width height thumbnail video_url thumbnail_url
+    dimensions="$($ffprobe_bin -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$candidate" 2>/dev/null)" || fail "Could not read video dimensions"
+    IFS=x read -r width height <<< "$dimensions"
+    [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || fail "Video dimensions are invalid"
+
+    thumbnail="${compression_work_dir}/thumbnail.jpg"
+    printf 'stage\tpreview\n'
+    "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$candidate" -map 0:v:0 -frames:v 1 -q:v 2 "$thumbnail" || fail "Could not create preview image"
+    [ -s "$thumbnail" ] || fail "Preview image is empty"
+
+    printf 'stage\tuploading-video\n'
+    video_url="$(upload_catbox "$candidate")" || fail "Catbox video upload failed"
+    printf 'stage\tuploading-preview\n'
+    thumbnail_url="$(upload_catbox "$thumbnail")" || fail "Catbox preview upload failed"
+    printf 'result\t%s\t%s\t%s\t%s\n' "$video_url" "$thumbnail_url" "$width" "$height"
+}
+
 case "${1:-}" in
     local-compress)
         local_compress "$@"
         ;;
+    share)
+        share_video "$@"
+        ;;
     *)
-        fail "Usage: clipshare-process local-compress <absolute-video-path> [best|balanced|gpu]"
+        fail "Usage: clipshare-process <local-compress|share> <absolute-video-path>"
         ;;
 esac

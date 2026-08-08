@@ -15,6 +15,7 @@ fi
 case "$*" in
     *format=duration*) printf '%s\n' "${FAKE_DURATION:-60}" ;;
     *stream=codec_name*) printf 'av1\n' ;;
+    *stream=width,height*) printf '1280x720\n' ;;
 esac
 EOF
 
@@ -28,7 +29,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         -pass) pass="$2"; shift 2 ;;
         -c:v) codec="$2"; shift 2 ;;
-        *.mp4) output="$1"; shift ;;
+        *.mp4|*.jpg) output="$1"; shift ;;
         *) shift ;;
     esac
 done
@@ -37,10 +38,22 @@ if [ "$pass" = "2" ] || [ "$codec" = "av1_vaapi" ]; then
     printf 'out_time_us=30000000\n'
     printf 'out_time_us=60000000\n'
     truncate -s "${FAKE_OUTPUT_SIZE:-8000}" "$output"
+elif [[ "$output" = *.jpg ]]; then
+    truncate -s 1000 "$output"
 fi
 EOF
 
-chmod +x "$tmp_dir/bin/ffmpeg" "$tmp_dir/bin/ffprobe"
+cat > "$tmp_dir/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${FAKE_CURL_LOG:?}"
+[ "${FAKE_CURL_FAIL:-0}" != "1" ] || exit 22
+case "$*" in
+    *thumbnail.jpg*) printf 'https://files.catbox.moe/preview.jpg\n' ;;
+    *) printf 'https://files.catbox.moe/video.mp4\n' ;;
+esac
+EOF
+
+chmod +x "$tmp_dir/bin/ffmpeg" "$tmp_dir/bin/ffprobe" "$tmp_dir/bin/curl"
 
 run_process() {
     CLIPSHARE_RUNTIME_DIR="$tmp_dir/runtime" \
@@ -51,6 +64,18 @@ run_process() {
     FAKE_ARGS_LOG="$tmp_dir/ffmpeg-args" \
     CLIPSHARE_VAAPI_DEVICE="${CLIPSHARE_VAAPI_DEVICE:-/dev/dri/renderD128}" \
     "$script" local-compress "$1" "${2:-balanced}"
+}
+
+run_share() {
+    CLIPSHARE_RUNTIME_DIR="$tmp_dir/runtime" \
+    CLIPSHARE_SHARE_LIMIT_BYTES="${SHARE_LIMIT_BYTES:-10000}" \
+    CLIPSHARE_SHARE_TARGET_BYTES=9000 \
+    FFMPEG_BIN="$tmp_dir/bin/ffmpeg" \
+    FFPROBE_BIN="$tmp_dir/bin/ffprobe" \
+    CURL_BIN="$tmp_dir/bin/curl" \
+    FAKE_ARGS_LOG="$tmp_dir/ffmpeg-args" \
+    FAKE_CURL_LOG="$tmp_dir/curl-args" \
+    "$script" share "$1"
 }
 
 assert_contains() {
@@ -118,5 +143,32 @@ set -e
 [[ "$status" -ne 0 ]]
 assert_contains "$invalid" $'error\tCould not read recording duration'
 [[ -s "$invalid_original" ]]
+
+share_original="$tmp_dir/share.mp4"
+printf 'public recording\n' > "$share_original"
+share_success="$(SHARE_LIMIT_BYTES=100000 run_share "$share_original")"
+assert_contains "$share_success" $'stage\tpreview'
+assert_contains "$share_success" $'stage\tuploading-video'
+assert_contains "$share_success" $'stage\tuploading-preview'
+assert_contains "$share_success" $'result\thttps://files.catbox.moe/video.mp4\thttps://files.catbox.moe/preview.jpg\t1280\t720'
+[[ -s "$share_original" ]]
+
+large_share="$tmp_dir/large-share.mp4"
+truncate -s 10000 "$large_share"
+large_success="$(run_share "$large_share")"
+assert_contains "$large_success" $'stage\tcompressing'
+assert_contains "$large_success" $'progress\t100'
+assert_contains "$large_success" $'result\t'
+[[ -s "$large_share" ]]
+
+failed_share="$tmp_dir/failed-share.mp4"
+printf 'keep public original\n' > "$failed_share"
+set +e
+failed_upload="$(FAKE_CURL_FAIL=1 SHARE_LIMIT_BYTES=100000 run_share "$failed_share" 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]]
+assert_contains "$failed_upload" $'error\tCatbox video upload failed'
+[[ -s "$failed_share" ]]
 
 printf 'clipshare-process tests passed\n'
