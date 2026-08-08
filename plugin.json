@@ -3,14 +3,14 @@
   "id": "clipShare",
   "name": "ClipShare",
   "description": "Record a screen region and choose how to share the finished clip.",
-  "version": "0.1.0",
-  "author": "master",
+  "version": "1.0.0",
+  "author": "agneswd",
   "icon": "videocam",
   "type": "daemon",
   "capabilities": ["daemon"],
   "component": "./ClipShareDaemon.qml",
   "settings": "./ClipShareSettings.qml",
   "requires_dms": ">=1.5.2",
-  "requires": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl", "curl", "jq"],
-  "permissions": ["settings_read", "settings_write", "shell_execute"]
+  "dependencies": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl", "curl", "jq"],
+  "permissions": ["settings_read", "settings_write", "process", "network"]
 }
