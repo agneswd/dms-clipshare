@@ -11,6 +11,6 @@
   "component": "./ClipShareDaemon.qml",
   "settings": "./ClipShareSettings.qml",
   "requires_dms": ">=1.5.2",
-  "requires": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl"],
+  "requires": ["gpu-screen-recorder", "ffmpeg", "slurp", "pactl", "curl"],
   "permissions": ["settings_read", "settings_write", "shell_execute"]
 }

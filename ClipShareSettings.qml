@@ -35,6 +35,34 @@ PluginSettings {
         ]
     }
 
+    StringSetting {
+        settingKey: "copyShortcut"
+        label: "Copy shortcut"
+        description: "One key, such as Enter or C."
+        defaultValue: "Enter"
+    }
+
+    StringSetting {
+        settingKey: "compressShortcut"
+        label: "Compress shortcut"
+        description: "One key, such as Space or K."
+        defaultValue: "Space"
+    }
+
+    StringSetting {
+        settingKey: "shareShortcut"
+        label: "Share shortcut"
+        description: "Two keys joined by +, such as Space+Enter."
+        defaultValue: "Space+Enter"
+    }
+
+    StringSetting {
+        settingKey: "discardShortcut"
+        label: "Discard shortcut"
+        description: "One key, such as Escape or Delete."
+        defaultValue: "Escape"
+    }
+
     SelectionSetting {
         settingKey: "progressPosition"
         label: "Progress position"

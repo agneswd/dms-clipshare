@@ -11,8 +11,8 @@ DankModal {
     property real videoSizeBytes: 0
     property string state: "ready"
     property string errorMessage: ""
-    property bool spacePressed: false
-    property bool enterPressed: false
+    property bool shareFirstPressed: false
+    property bool shareSecondPressed: false
     property bool chordHandled: false
 
     layerNamespace: "dms:plugins:clipShare"
@@ -75,6 +75,20 @@ DankModal {
             closePanel()
     }
 
+    function keyCode(name) {
+        const clean = String(name || "").trim()
+        const aliases = { "Enter": "Return", "Esc": "Escape" }
+        const qtName = aliases[clean] || (clean.length === 1 ? clean.toUpperCase() : clean)
+        return Qt["Key_" + qtName] || 0
+    }
+
+    function shareKeys() {
+        const parts = daemon ? daemon.shareShortcut.split("+") : []
+        const first = parts.length === 2 ? keyCode(parts[0]) : Qt.Key_Space
+        const second = parts.length === 2 ? keyCode(parts[1]) : Qt.Key_Return
+        return first && second && first !== second ? [first, second] : [Qt.Key_Space, Qt.Key_Return]
+    }
+
     function formatFileSize(bytes) {
         if (bytes >= 1000000000)
             return (bytes / 1000000000).toFixed(1) + " GB"
@@ -102,42 +116,40 @@ DankModal {
                     event.accepted = true
                     return
                 }
-                if (event.key === Qt.Key_Escape) {
+                const share = root.shareKeys()
+                if (event.key === root.keyCode(root.daemon ? root.daemon.discardShortcut : "Escape")) {
                     copyTimer.stop()
                     compressTimer.stop()
                     root.discardRecording()
                     event.accepted = true
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.enterPressed = true
-                    if (root.spacePressed) {
+                } else {
+                    if (event.key === share[0])
+                        root.shareFirstPressed = true
+                    if (event.key === share[1])
+                        root.shareSecondPressed = true
+                    if (root.shareFirstPressed && root.shareSecondPressed) {
                         copyTimer.stop()
                         compressTimer.stop()
                         root.chordHandled = true
                         root.shareRecording()
-                    } else {
+                        event.accepted = true
+                    } else if (event.key === root.keyCode(root.daemon ? root.daemon.copyShortcut : "Enter")) {
                         copyTimer.restart()
-                    }
-                    event.accepted = true
-                } else if (event.key === Qt.Key_Space) {
-                    root.spacePressed = true
-                    if (root.enterPressed) {
-                        copyTimer.stop()
-                        compressTimer.stop()
-                        root.chordHandled = true
-                        root.shareRecording()
-                    } else {
+                        event.accepted = true
+                    } else if (event.key === root.keyCode(root.daemon ? root.daemon.compressShortcut : "Space")) {
                         compressTimer.restart()
+                        event.accepted = true
                     }
-                    event.accepted = true
                 }
             }
 
             Keys.onReleased: event => {
-                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                    root.enterPressed = false
-                else if (event.key === Qt.Key_Space)
-                    root.spacePressed = false
-                if (!root.enterPressed && !root.spacePressed)
+                const share = root.shareKeys()
+                if (event.key === share[0])
+                    root.shareFirstPressed = false
+                if (event.key === share[1])
+                    root.shareSecondPressed = false
+                if (!root.shareFirstPressed && !root.shareSecondPressed)
                     root.chordHandled = false
             }
 
@@ -145,7 +157,7 @@ DankModal {
                 id: copyTimer
                 interval: 180
                 onTriggered: {
-                    if (!root.chordHandled && !root.spacePressed)
+                    if (!root.chordHandled)
                         root.copyOriginal()
                 }
             }
@@ -154,7 +166,7 @@ DankModal {
                 id: compressTimer
                 interval: 180
                 onTriggered: {
-                    if (!root.chordHandled && !root.enterPressed)
+                    if (!root.chordHandled)
                         root.compressRecording()
                 }
             }
@@ -231,7 +243,7 @@ DankModal {
                         StyledText {
                             id: keyLabel
                             anchors.centerIn: parent
-                            text: "Enter"
+                            text: root.daemon ? root.daemon.copyShortcut : "Enter"
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
                             color: Theme.surfaceText
@@ -279,7 +291,7 @@ DankModal {
                         StyledText {
                             id: shareKeyLabel
                             anchors.centerIn: parent
-                            text: "Space + Enter"
+                            text: root.daemon ? root.daemon.shareShortcut.split("+").join(" + ") : "Space + Enter"
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
                             color: Theme.surfaceText
@@ -327,7 +339,7 @@ DankModal {
                         StyledText {
                             id: compressKeyLabel
                             anchors.centerIn: parent
-                            text: "Space"
+                            text: root.daemon ? root.daemon.compressShortcut : "Space"
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
                             color: Theme.surfaceText
@@ -344,7 +356,7 @@ DankModal {
 
                 StyledText {
                     width: parent.width
-                    text: root.errorMessage || "Esc discards this recording."
+                    text: root.errorMessage || (root.daemon ? root.daemon.discardShortcut : "Escape") + " discards this recording."
                     font.pixelSize: Theme.fontSizeSmall
                     color: root.errorMessage ? Theme.error : Theme.surfaceVariantText
                     elide: Text.ElideRight

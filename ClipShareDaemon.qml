@@ -39,6 +39,27 @@ PluginComponent {
         return ["best", "balanced", "gpu"].includes(value) ? value : "balanced"
     }
 
+    function validShortcutKey(value) {
+        const key = String(value || "").trim()
+        return key.length === 1 || ["Enter", "Space", "Escape", "Esc", "Tab", "Backspace", "Delete", "Home", "End", "PageUp", "PageDown", "Up", "Down", "Left", "Right"].includes(key)
+    }
+
+    function singleShortcut(value, fallback) {
+        const key = String(value || "").trim()
+        return validShortcutKey(key) ? key : fallback
+    }
+
+    function chordShortcut(value) {
+        const parts = String(value || "").split("+")
+        return parts.length === 2 && validShortcutKey(parts[0]) && validShortcutKey(parts[1]) && parts[0] !== parts[1]
+            ? parts[0].trim() + "+" + parts[1].trim() : "Space+Enter"
+    }
+
+    readonly property string copyShortcut: singleShortcut(pluginData.copyShortcut, "Enter")
+    readonly property string compressShortcut: singleShortcut(pluginData.compressShortcut, "Space")
+    readonly property string shareShortcut: chordShortcut(pluginData.shareShortcut)
+    readonly property string discardShortcut: singleShortcut(pluginData.discardShortcut, "Escape")
+
     function toastInfo(message) {
         if (typeof ToastService !== "undefined" && ToastService)
             ToastService.showInfo(message)
