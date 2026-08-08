@@ -190,6 +190,8 @@ share_video() {
     if [ "$upload_mode" = "catbox" ]; then
         printf 'stage\tuploading-video\n'
         video_url="$(upload_catbox "$candidate")" || fail "Catbox video upload failed"
+        rm -f -- "$video_path" || fail "Upload succeeded, but the local recording could not be removed"
+        [ ! -e "$video_path" ] || fail "Upload succeeded, but the local recording could not be removed"
         printf 'result\t%s\n' "$video_url"
         return
     fi
@@ -214,6 +216,8 @@ share_video() {
         https://autocompressor.net/av1/mkshortlink)" || fail "Autocompressor short-link request failed"
     short_id="$(printf '%s' "$short_response" | jq -er 'select(.success == true) | .shortLink | select(type == "string" and length > 0)')" \
         || fail "Autocompressor returned an invalid short link"
+    rm -f -- "$video_path" || fail "Upload succeeded, but the local recording could not be removed"
+    [ ! -e "$video_path" ] || fail "Upload succeeded, but the local recording could not be removed"
     printf 'result\thttps://autocompressor.net/av1?s=%s\n' "$short_id"
 }
 
