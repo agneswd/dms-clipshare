@@ -2,6 +2,8 @@
 
 ClipShare is a Dank Material Shell plugin for recording a screen region and deciding what happens to the finished video without leaving the keyboard.
 
+![ClipShare completion panel](assets/screenshot.png)
+
 ## Features
 
 - GPU-accelerated region recording through GPU Screen Recorder.
