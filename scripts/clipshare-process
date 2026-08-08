@@ -22,11 +22,16 @@ fail() {
 
 local_compress() {
     local video_path="${2:-}"
+    local compression_mode="${3:-balanced}"
     case "$video_path" in
         /*.mp4) ;;
         *) fail "Expected an absolute MP4 path" ;;
     esac
     [ -f "$video_path" ] || fail "Recording is missing"
+    case "$compression_mode" in
+        best|balanced|gpu) ;;
+        *) fail "Unknown compression mode" ;;
+    esac
 
     printf 'stage\tchecking\n'
 
@@ -47,18 +52,44 @@ local_compress() {
 
     printf 'stage\tcompressing\n'
 
-    "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
-        -map 0:v:0 -vf "$video_filter" -an -pix_fmt yuv420p \
-        -c:v libsvtav1 -preset 4 -svtav1-params tune=0 -b:v "$video_bitrate" \
-        -pass 1 -passlogfile "$passlog" -f null /dev/null || fail "Compression pass 1 failed"
+    if [ "$compression_mode" = "gpu" ]; then
+        local vaapi_device="${CLIPSHARE_VAAPI_DEVICE:-}"
+        if [ -z "$vaapi_device" ]; then
+            local device
+            for device in /dev/dri/renderD*; do
+                [ -e "$device" ] || continue
+                if "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -vaapi_device "$device" \
+                    -f lavfi -i color=size=320x180:rate=1 -frames:v 1 -vf 'format=nv12,hwupload' \
+                    -c:v av1_vaapi -f null /dev/null 2>/dev/null; then
+                    vaapi_device="$device"
+                    break
+                fi
+            done
+        fi
+        [ -n "$vaapi_device" ] || fail "No compatible GPU AV1 encoder found"
 
-    coproc CLIPSHARE_ENCODER {
+        coproc CLIPSHARE_ENCODER {
+            "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -vaapi_device "$vaapi_device" -i "$video_path" \
+                -map 0:v:0 -map '0:a?' -vf "$video_filter,format=nv12,hwupload" \
+                -c:v av1_vaapi -b:v "$video_bitrate" -c:a aac -b:a 64k -movflags +faststart \
+                -progress pipe:1 -nostats "$temp_path"
+        }
+    else
+        local preset=6
+        [ "$compression_mode" = "best" ] && preset=4
         "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
-            -map 0:v:0 -map '0:a?' -vf "$video_filter" -pix_fmt yuv420p \
-            -c:v libsvtav1 -preset 4 -svtav1-params tune=0 -b:v "$video_bitrate" \
-            -pass 2 -passlogfile "$passlog" -c:a aac -b:a 64k -movflags +faststart \
-            -progress pipe:1 -nostats "$temp_path"
-    }
+            -map 0:v:0 -vf "$video_filter" -an -pix_fmt yuv420p \
+            -c:v libsvtav1 -preset "$preset" -svtav1-params tune=0 -b:v "$video_bitrate" \
+            -pass 1 -passlogfile "$passlog" -f null /dev/null || fail "Compression pass 1 failed"
+
+        coproc CLIPSHARE_ENCODER {
+            "$ffmpeg_bin" -nostdin -hide_banner -loglevel error -y -i "$video_path" \
+                -map 0:v:0 -map '0:a?' -vf "$video_filter" -pix_fmt yuv420p \
+                -c:v libsvtav1 -preset "$preset" -svtav1-params tune=0 -b:v "$video_bitrate" \
+                -pass 2 -passlogfile "$passlog" -c:a aac -b:a 64k -movflags +faststart \
+                -progress pipe:1 -nostats "$temp_path"
+        }
+    fi
     encoder_pid="$CLIPSHARE_ENCODER_PID"
     exec {progress_fd}<&"${CLIPSHARE_ENCODER[0]}" || fail "Could not read compression progress"
 
@@ -70,7 +101,7 @@ local_compress() {
         fi
     done
     exec {progress_fd}<&-
-    wait "$encoder_pid" || fail "Compression pass 2 failed"
+    wait "$encoder_pid" || fail "Compression failed"
     printf 'progress\t100\n'
 
     [ -s "$temp_path" ] || fail "Compressed recording is empty"
@@ -93,6 +124,6 @@ case "${1:-}" in
         local_compress "$@"
         ;;
     *)
-        fail "Usage: clipshare-process local-compress <absolute-video-path>"
+        fail "Usage: clipshare-process local-compress <absolute-video-path> [best|balanced|gpu]"
         ;;
 esac

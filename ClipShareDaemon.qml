@@ -33,6 +33,10 @@ PluginComponent {
         const value = pluginData.progressPosition || "top-right"
         return ["top-right", "top-left", "bottom-right", "bottom-left"].includes(value) ? value : "top-right"
     }
+    readonly property string compressionMode: {
+        const value = pluginData.compressionMode || "balanced"
+        return ["best", "balanced", "gpu"].includes(value) ? value : "balanced"
+    }
 
     function toastInfo(message) {
         if (typeof ToastService !== "undefined" && ToastService)
@@ -112,7 +116,7 @@ PluginComponent {
         operationFilePath = path
         operationFileSize = sizeBytes
         progressHud.targetScreen = CompositorService.getFocusedScreen()
-        compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path]
+        compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path, compressionMode]
         compressionProcess.running = true
         return true
     }

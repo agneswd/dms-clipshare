@@ -17,10 +17,22 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Choose where compression and upload progress appears while you continue using the desktop."
+        text: "Choose how recordings are compressed and where progress appears."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap
+    }
+
+    SelectionSetting {
+        settingKey: "compressionMode"
+        label: "Compression mode"
+        description: "Balanced is faster with a small quality tradeoff. Best quality is slower. Fast GPU prioritizes speed."
+        defaultValue: "balanced"
+        options: [
+            { label: "Best quality", value: "best" },
+            { label: "Balanced", value: "balanced" },
+            { label: "Fast GPU", value: "gpu" }
+        ]
     }
 
     SelectionSetting {
