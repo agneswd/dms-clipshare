@@ -11,13 +11,16 @@ DankModal {
     property real videoSizeBytes: 0
     property string state: "ready"
     property string errorMessage: ""
+    property bool spacePressed: false
+    property bool enterPressed: false
+    property bool chordHandled: false
 
     layerNamespace: "dms:plugins:clipShare"
     keepPopoutsOpen: true
     closeOnEscapeKey: false
     closeOnBackgroundClick: false
     modalWidth: 500
-    modalHeight: 290
+    modalHeight: 360
     shouldHaveFocus: true
 
     function openFor(path, sizeBytes, message) {
@@ -65,6 +68,13 @@ DankModal {
             closePanel()
     }
 
+    function shareRecording() {
+        if (state !== "ready" || !daemon)
+            return
+        if (daemon.startShare(videoPath, videoSizeBytes))
+            closePanel()
+    }
+
     function formatFileSize(bytes) {
         if (bytes >= 1000000000)
             return (bytes / 1000000000).toFixed(1) + " GB"
@@ -88,15 +98,64 @@ DankModal {
             focus: true
 
             Keys.onPressed: event => {
+                if (event.isAutoRepeat) {
+                    event.accepted = true
+                    return
+                }
                 if (event.key === Qt.Key_Escape) {
+                    copyTimer.stop()
+                    compressTimer.stop()
                     root.discardRecording()
                     event.accepted = true
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.copyOriginal()
+                    root.enterPressed = true
+                    if (root.spacePressed) {
+                        copyTimer.stop()
+                        compressTimer.stop()
+                        root.chordHandled = true
+                        root.shareRecording()
+                    } else {
+                        copyTimer.restart()
+                    }
                     event.accepted = true
                 } else if (event.key === Qt.Key_Space) {
-                    root.compressRecording()
+                    root.spacePressed = true
+                    if (root.enterPressed) {
+                        copyTimer.stop()
+                        compressTimer.stop()
+                        root.chordHandled = true
+                        root.shareRecording()
+                    } else {
+                        compressTimer.restart()
+                    }
                     event.accepted = true
+                }
+            }
+
+            Keys.onReleased: event => {
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                    root.enterPressed = false
+                else if (event.key === Qt.Key_Space)
+                    root.spacePressed = false
+                if (!root.enterPressed && !root.spacePressed)
+                    root.chordHandled = false
+            }
+
+            Timer {
+                id: copyTimer
+                interval: 180
+                onTriggered: {
+                    if (!root.chordHandled && !root.spacePressed)
+                        root.copyOriginal()
+                }
+            }
+
+            Timer {
+                id: compressTimer
+                interval: 180
+                onTriggered: {
+                    if (!root.chordHandled && !root.enterPressed)
+                        root.compressRecording()
                 }
             }
 
@@ -184,6 +243,54 @@ DankModal {
                         anchors.fill: parent
                         enabled: root.state === "ready"
                         onClicked: root.copyOriginal()
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 56
+                    radius: Theme.cornerRadius
+                    color: shareArea.containsMouse ? Theme.surfaceHover : Theme.surfaceVariantAlpha
+                    opacity: root.state === "ready" ? 1 : 0.6
+
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.right: shareShortcut.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Theme.spacingM
+                        anchors.rightMargin: Theme.spacingM
+                        text: "Upload and copy share link"
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.weight: Font.Medium
+                        color: Theme.surfaceText
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        id: shareShortcut
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.spacingM
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: shareKeyLabel.implicitWidth + Theme.spacingM
+                        height: shareKeyLabel.implicitHeight + Theme.spacingXS
+                        radius: Theme.cornerRadiusSmall
+                        color: Theme.surfaceContainerHigh
+
+                        StyledText {
+                            id: shareKeyLabel
+                            anchors.centerIn: parent
+                            text: "Space + Enter"
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Medium
+                            color: Theme.surfaceText
+                        }
+                    }
+
+                    MouseArea {
+                        id: shareArea
+                        anchors.fill: parent
+                        enabled: root.state === "ready"
+                        onClicked: root.shareRecording()
                     }
                 }
 

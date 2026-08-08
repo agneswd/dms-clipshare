@@ -62,7 +62,7 @@ PanelWindow {
                 DankIcon {
                     name: root.daemon && root.daemon.operationState === "error" ? "error"
                         : root.daemon && root.daemon.operationState === "success" ? "check_circle"
-                        : "compress"
+                        : root.daemon && root.daemon.operationKind === "sharing" ? "cloud_upload" : "compress"
                     size: Theme.iconSize
                     color: root.daemon && root.daemon.operationState === "error" ? Theme.error : Theme.primary
                 }
@@ -79,9 +79,17 @@ PanelWindow {
                             if (root.daemon.operationState === "error")
                                 return "ClipShare failed - click to retry"
                             if (root.daemon.operationState === "success")
-                                return "Recording ready and copied"
+                                return root.daemon.operationKind === "sharing" ? "Share link copied" : "Recording ready and copied"
                             if (root.daemon.compressionStage === "checking")
                                 return "Checking recording..."
+                            if (root.daemon.compressionStage === "preview")
+                                return "Creating preview..."
+                            if (root.daemon.compressionStage === "uploading-video")
+                                return "Uploading video..."
+                            if (root.daemon.compressionStage === "uploading-preview")
+                                return "Uploading preview..."
+                            if (root.daemon.compressionStage === "copying-link")
+                                return "Copying share link..."
                             if (root.daemon.compressionStage === "copying-file")
                                 return "Copying compressed recording..."
                             return "Compressing recording - " + root.daemon.compressionProgress + "%"
@@ -108,14 +116,26 @@ PanelWindow {
                 width: parent.width
                 height: 4
                 radius: 2
+                clip: true
                 visible: root.daemon && root.daemon.operationState === "working"
                 color: Theme.surfaceVariant
 
                 Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1, (root.daemon ? root.daemon.compressionProgress : 0) / 100))
+                    id: progressFill
+                    readonly property bool indeterminate: root.daemon && ["uploading-video", "uploading-preview"].includes(root.daemon.compressionStage)
+                    width: indeterminate ? parent.width * 0.35
+                        : parent.width * Math.max(0, Math.min(1, (root.daemon ? root.daemon.compressionProgress : 0) / 100))
                     height: parent.height
                     radius: parent.radius
                     color: Theme.primary
+
+                    NumberAnimation on x {
+                        running: progressFill.indeterminate
+                        from: -progressFill.width
+                        to: progressFill.parent.width
+                        duration: 1000
+                        loops: Animation.Infinite
+                    }
                 }
             }
         }

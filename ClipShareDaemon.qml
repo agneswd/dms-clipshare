@@ -26,6 +26,7 @@ PluginComponent {
     property real compressionResultSize: 0
     property string compressionError: ""
     property string operationState: "idle"
+    property string operationKind: ""
     property string operationFilePath: ""
     property real operationFileSize: 0
     readonly property string operationFileName: operationFilePath ? operationFilePath.split("/").pop() : ""
@@ -91,6 +92,18 @@ PluginComponent {
         })
     }
 
+    function copyText(text, callback) {
+        DMSService.sendRequest("clipboard.copy", { "text": text }, response => {
+            if (response && response.error) {
+                toastError("Could not copy the share link")
+                callback(false)
+                return
+            }
+            toastInfo("Share link copied to clipboard")
+            callback(true)
+        })
+    }
+
     function discardLocalFile(path, callback) {
         if (!path || discardProcess.running) {
             callback(false)
@@ -118,11 +131,29 @@ PluginComponent {
         compressionResultSize = 0
         compressionError = ""
         operationState = "working"
+        operationKind = "compression"
         operationFilePath = path
         operationFileSize = sizeBytes
         progressHud.targetScreen = CompositorService.getFocusedScreen()
         compressionProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "local-compress", path, compressionMode]
         compressionProcess.running = true
+        return true
+    }
+
+    function startShare(path, sizeBytes) {
+        if (!path || shareProcess.running || compressionProcess.running)
+            return false
+
+        compressionStage = "checking"
+        compressionProgress = 0
+        compressionError = ""
+        operationState = "working"
+        operationKind = "sharing"
+        operationFilePath = path
+        operationFileSize = sizeBytes
+        progressHud.targetScreen = CompositorService.getFocusedScreen()
+        shareProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "share", path]
+        shareProcess.running = true
         return true
     }
 
@@ -226,6 +257,60 @@ PluginComponent {
             root.copyLocalFile(result, success => {
                 if (!success) {
                     root.compressionError = "The compressed recording is safe, but clipboard copy failed"
+                    root.operationState = "error"
+                    return
+                }
+                root.operationState = "success"
+                successHideTimer.restart()
+            })
+        }
+    }
+
+    Process {
+        id: shareProcess
+        running: false
+        property string resultUrl: ""
+
+        stdout: SplitParser {
+            onRead: line => {
+                const fields = line.split("\t")
+                if (fields[0] === "stage") {
+                    root.compressionStage = fields[1] || ""
+                } else if (fields[0] === "progress") {
+                    root.compressionProgress = Math.max(0, Math.min(100, Number(fields[1]) || 0))
+                } else if (fields[0] === "result" && fields.length >= 5) {
+                    shareProcess.resultUrl = "https://autocompressor.net/av1?v=" + encodeURIComponent(fields[1])
+                        + "&i=" + encodeURIComponent(fields[2])
+                        + "&w=" + encodeURIComponent(fields[3])
+                        + "&h=" + encodeURIComponent(fields[4])
+                } else if (fields[0] === "error") {
+                    root.compressionError = fields.slice(1).join(" ")
+                }
+            }
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (text.trim() && !root.compressionError)
+                    root.compressionError = text.trim()
+            }
+        }
+
+        onRunningChanged: {
+            if (running)
+                resultUrl = ""
+        }
+
+        onExited: exitCode => {
+            if (exitCode !== 0 || !resultUrl) {
+                root.toastError(root.compressionError || "Could not share recording")
+                root.operationState = "error"
+                return
+            }
+            root.compressionStage = "copying-link"
+            root.copyText(resultUrl, success => {
+                if (!success) {
+                    root.compressionError = "The upload succeeded, but clipboard copy failed"
                     root.operationState = "error"
                     return
                 }
