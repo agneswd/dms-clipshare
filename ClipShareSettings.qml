@@ -79,6 +79,17 @@ PluginSettings {
         ]
     }
 
+    SelectionSetting {
+        settingKey: "uploadMode"
+        label: "Upload mode"
+        description: "Catbox only copies the direct video URL. Catbox + Autocompressor creates a short embed link with a thumbnail."
+        defaultValue: "embed"
+        options: [
+            { label: "Catbox + Autocompressor", value: "embed" },
+            { label: "Catbox only", value: "catbox" }
+        ]
+    }
+
     StringSetting {
         settingKey: "recordShortcut"
         label: "Start/stop recording shortcut"

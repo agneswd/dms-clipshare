@@ -82,7 +82,7 @@ run_share() {
     CURL_BIN="$tmp_dir/bin/curl" \
     FAKE_ARGS_LOG="$tmp_dir/ffmpeg-args" \
     FAKE_CURL_LOG="$tmp_dir/curl-args" \
-    "$script" share "$1"
+    "$script" share "$1" "${2:-embed}"
 }
 
 assert_contains() {
@@ -158,8 +158,17 @@ assert_contains "$share_success" $'stage\tpreview'
 assert_contains "$share_success" $'stage\tuploading-video'
 assert_contains "$share_success" $'stage\tuploading-preview'
 assert_contains "$share_success" $'stage\tshortening'
-assert_contains "$share_success" $'result\thttps://files.catbox.moe/video.mp4\thttps://files.catbox.moe/preview.jpg\t1280\t720\thttps://autocompressor.net/av1?s=abc123'
+assert_contains "$share_success" $'result\thttps://autocompressor.net/av1?s=abc123'
 [[ -s "$share_original" ]]
+
+catbox_original="$tmp_dir/catbox-only.mp4"
+printf 'direct upload\n' > "$catbox_original"
+curl_lines_before="$(wc -l < "$tmp_dir/curl-args")"
+catbox_success="$(SHARE_LIMIT_BYTES=100000 run_share "$catbox_original" catbox)"
+assert_contains "$catbox_success" $'result\thttps://files.catbox.moe/video.mp4'
+[[ "$catbox_success" != *$'stage\tpreview'* ]]
+[[ "$(wc -l < "$tmp_dir/curl-args")" -eq $((curl_lines_before + 1)) ]]
+[[ -s "$catbox_original" ]]
 
 large_share="$tmp_dir/large-share.mp4"
 truncate -s 10000 "$large_share"

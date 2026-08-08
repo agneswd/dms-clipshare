@@ -134,11 +134,16 @@ upload_catbox() {
 
 share_video() {
     local video_path="${2:-}"
+    local upload_mode="${3:-embed}"
     case "$video_path" in
         /*.mp4) ;;
         *) fail "Expected an absolute MP4 path" ;;
     esac
     [ -f "$video_path" ] || fail "Recording is missing"
+    case "$upload_mode" in
+        catbox|embed) ;;
+        *) fail "Unknown upload mode" ;;
+    esac
 
     printf 'stage\tchecking\n'
     mkdir -p -- "$runtime_dir" || fail "Could not create sharing workspace"
@@ -181,7 +186,15 @@ share_video() {
         candidate="$compressed_path"
     fi
 
-    local dimensions width height thumbnail video_url thumbnail_url short_response short_id
+    local video_url
+    if [ "$upload_mode" = "catbox" ]; then
+        printf 'stage\tuploading-video\n'
+        video_url="$(upload_catbox "$candidate")" || fail "Catbox video upload failed"
+        printf 'result\t%s\n' "$video_url"
+        return
+    fi
+
+    local dimensions width height thumbnail thumbnail_url short_response short_id
     dimensions="$($ffprobe_bin -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$candidate" 2>/dev/null)" || fail "Could not read video dimensions"
     IFS=x read -r width height <<< "$dimensions"
     [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || fail "Video dimensions are invalid"
@@ -201,7 +214,7 @@ share_video() {
         https://autocompressor.net/av1/mkshortlink)" || fail "Autocompressor short-link request failed"
     short_id="$(printf '%s' "$short_response" | jq -er 'select(.success == true) | .shortLink | select(type == "string" and length > 0)')" \
         || fail "Autocompressor returned an invalid short link"
-    printf 'result\t%s\t%s\t%s\t%s\thttps://autocompressor.net/av1?s=%s\n' "$video_url" "$thumbnail_url" "$width" "$height" "$short_id"
+    printf 'result\thttps://autocompressor.net/av1?s=%s\n' "$short_id"
 }
 
 case "${1:-}" in

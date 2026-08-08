@@ -38,6 +38,7 @@ PluginComponent {
         const value = pluginData.compressionMode || "balanced"
         return ["best", "balanced", "gpu"].includes(value) ? value : "balanced"
     }
+    readonly property string uploadMode: pluginData.uploadMode === "catbox" ? "catbox" : "embed"
 
     function validShortcutKey(value) {
         const key = String(value || "").trim()
@@ -174,7 +175,7 @@ PluginComponent {
         operationFilePath = path
         operationFileSize = sizeBytes
         progressHud.targetScreen = CompositorService.getFocusedScreen()
-        shareProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "share", path]
+        shareProcess.command = ["bash", pluginDir + "scripts/clipshare-process", "share", path, uploadMode]
         shareProcess.running = true
         return true
     }
@@ -300,8 +301,8 @@ PluginComponent {
                     root.compressionStage = fields[1] || ""
                 } else if (fields[0] === "progress") {
                     root.compressionProgress = Math.max(0, Math.min(100, Number(fields[1]) || 0))
-                } else if (fields[0] === "result" && fields.length >= 6) {
-                    shareProcess.resultUrl = fields[5]
+                } else if (fields[0] === "result" && fields.length >= 2) {
+                    shareProcess.resultUrl = fields[1]
                 } else if (fields[0] === "error") {
                     root.compressionError = fields.slice(1).join(" ")
                 }
