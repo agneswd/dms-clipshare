@@ -107,6 +107,11 @@ PluginComponent {
         if (!path || compressionProcess.running)
             return false
 
+        if (sizeBytes > 0 && sizeBytes < 10000000) {
+            copyLocalFile(path, () => {})
+            return true
+        }
+
         compressionStage = "checking"
         compressionProgress = 0
         compressionResult = ""
