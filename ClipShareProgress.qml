@@ -88,6 +88,8 @@ PanelWindow {
                                 return "Uploading video..."
                             if (root.daemon.compressionStage === "uploading-preview")
                                 return "Uploading preview..."
+                            if (root.daemon.compressionStage === "shortening")
+                                return "Creating short link..."
                             if (root.daemon.compressionStage === "copying-link")
                                 return "Copying share link..."
                             if (root.daemon.compressionStage === "copying-file")

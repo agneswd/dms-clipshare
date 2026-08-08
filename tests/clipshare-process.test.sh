@@ -48,6 +48,13 @@ cat > "$tmp_dir/bin/curl" <<'EOF'
 printf '%s\n' "$*" >> "${FAKE_CURL_LOG:?}"
 [ "${FAKE_CURL_FAIL:-0}" != "1" ] || exit 22
 case "$*" in
+    *autocompressor.net/av1/mkshortlink*)
+        if [ "${FAKE_SHORT_FAIL:-0}" = "1" ]; then
+            printf '{"success":false,"message":"failed"}\n'
+        else
+            printf '{"success":true,"shortLink":"abc123"}\n'
+        fi
+        ;;
     *thumbnail.jpg*) printf 'https://files.catbox.moe/preview.jpg\n' ;;
     *) printf 'https://files.catbox.moe/video.mp4\n' ;;
 esac
@@ -150,7 +157,8 @@ share_success="$(SHARE_LIMIT_BYTES=100000 run_share "$share_original")"
 assert_contains "$share_success" $'stage\tpreview'
 assert_contains "$share_success" $'stage\tuploading-video'
 assert_contains "$share_success" $'stage\tuploading-preview'
-assert_contains "$share_success" $'result\thttps://files.catbox.moe/video.mp4\thttps://files.catbox.moe/preview.jpg\t1280\t720'
+assert_contains "$share_success" $'stage\tshortening'
+assert_contains "$share_success" $'result\thttps://files.catbox.moe/video.mp4\thttps://files.catbox.moe/preview.jpg\t1280\t720\thttps://autocompressor.net/av1?s=abc123'
 [[ -s "$share_original" ]]
 
 large_share="$tmp_dir/large-share.mp4"
@@ -170,5 +178,15 @@ set -e
 [[ "$status" -ne 0 ]]
 assert_contains "$failed_upload" $'error\tCatbox video upload failed'
 [[ -s "$failed_share" ]]
+
+failed_short="$tmp_dir/failed-short.mp4"
+printf 'keep short original\n' > "$failed_short"
+set +e
+short_error="$(FAKE_SHORT_FAIL=1 SHARE_LIMIT_BYTES=100000 run_share "$failed_short" 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]]
+assert_contains "$short_error" $'error\tAutocompressor returned an invalid short link'
+[[ -s "$failed_short" ]]
 
 printf 'clipshare-process tests passed\n'

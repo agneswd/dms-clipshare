@@ -181,7 +181,7 @@ share_video() {
         candidate="$compressed_path"
     fi
 
-    local dimensions width height thumbnail video_url thumbnail_url
+    local dimensions width height thumbnail video_url thumbnail_url short_response short_id
     dimensions="$($ffprobe_bin -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$candidate" 2>/dev/null)" || fail "Could not read video dimensions"
     IFS=x read -r width height <<< "$dimensions"
     [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || fail "Video dimensions are invalid"
@@ -195,7 +195,13 @@ share_video() {
     video_url="$(upload_catbox "$candidate")" || fail "Catbox video upload failed"
     printf 'stage\tuploading-preview\n'
     thumbnail_url="$(upload_catbox "$thumbnail")" || fail "Catbox preview upload failed"
-    printf 'result\t%s\t%s\t%s\t%s\n' "$video_url" "$thumbnail_url" "$width" "$height"
+    printf 'stage\tshortening\n'
+    short_response="$($curl_bin -fsS --max-time 600 -H 'Content-Type: application/json' \
+        --data "$(jq -nc --arg v "$video_url" --arg i "$thumbnail_url" --arg w "$width" --arg h "$height" '{v:$v,i:$i,w:$w,h:$h}')" \
+        https://autocompressor.net/av1/mkshortlink)" || fail "Autocompressor short-link request failed"
+    short_id="$(printf '%s' "$short_response" | jq -er 'select(.success == true) | .shortLink | select(type == "string" and length > 0)')" \
+        || fail "Autocompressor returned an invalid short link"
+    printf 'result\t%s\t%s\t%s\t%s\thttps://autocompressor.net/av1?s=%s\n' "$video_url" "$thumbnail_url" "$width" "$height" "$short_id"
 }
 
 case "${1:-}" in

@@ -299,11 +299,8 @@ PluginComponent {
                     root.compressionStage = fields[1] || ""
                 } else if (fields[0] === "progress") {
                     root.compressionProgress = Math.max(0, Math.min(100, Number(fields[1]) || 0))
-                } else if (fields[0] === "result" && fields.length >= 5) {
-                    shareProcess.resultUrl = "https://autocompressor.net/av1?v=" + encodeURIComponent(fields[1])
-                        + "&i=" + encodeURIComponent(fields[2])
-                        + "&w=" + encodeURIComponent(fields[3])
-                        + "&h=" + encodeURIComponent(fields[4])
+                } else if (fields[0] === "result" && fields.length >= 6) {
+                    shareProcess.resultUrl = fields[5]
                 } else if (fields[0] === "error") {
                     root.compressionError = fields.slice(1).join(" ")
                 }
