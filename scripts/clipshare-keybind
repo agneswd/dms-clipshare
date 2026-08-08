@@ -10,7 +10,7 @@ case "$new_key" in
     ""|*[!A-Za-z0-9+_-]*) printf 'Shortcut contains unsupported characters\n' >&2; exit 1 ;;
 esac
 case "$provider" in
-    niri|hyprland) ;;
+    niri|hyprland|mangowc) ;;
     *) printf 'Unsupported compositor keybind provider\n' >&2; exit 1 ;;
 esac
 
