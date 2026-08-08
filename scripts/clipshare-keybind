@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -u
+
+dms_bin="${DMS_BIN:-dms}"
+action="spawn dms ipc call clipShare toggle"
+new_key="${1:-}"
+
+case "$new_key" in
+    ""|*[!A-Za-z0-9+_-]*) printf 'Shortcut contains unsupported characters\n' >&2; exit 1 ;;
+esac
+
+binds="$($dms_bin keybinds show niri)" || { printf 'Could not read Niri shortcuts\n' >&2; exit 1; }
+conflicts="$(printf '%s' "$binds" | jq -r --arg key "$new_key" --arg action "$action" \
+    '[.binds[][] | select(.key == $key and .action != $action)] | length')" || exit 1
+[ "$conflicts" -eq 0 ] || { printf 'Shortcut is already in use\n' >&2; exit 1; }
+
+current_key="$(printf '%s' "$binds" | jq -r --arg action "$action" \
+    '[.binds[][] | select(.action == $action) | .key][0] // empty')" || exit 1
+[ "$current_key" != "$new_key" ] || exit 0
+
+command=("$dms_bin" keybinds set niri "$new_key" "$action" --desc "ClipShare recording" --no-repeat)
+[ -z "$current_key" ] || command+=(--replace-key "$current_key")
+"${command[@]}"

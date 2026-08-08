@@ -59,6 +59,7 @@ PluginComponent {
     readonly property string compressShortcut: singleShortcut(pluginData.compressShortcut, "Space")
     readonly property string shareShortcut: chordShortcut(pluginData.shareShortcut)
     readonly property string discardShortcut: singleShortcut(pluginData.discardShortcut, "Escape")
+    readonly property string recordShortcut: pluginData.recordShortcut || "Shift+Print"
 
     function toastInfo(message) {
         if (typeof ToastService !== "undefined" && ToastService)
@@ -85,7 +86,7 @@ PluginComponent {
         const event = fields[0]
 
         if (event === "started") {
-            toastInfo("Recording started. Press Shift+Print to finish.")
+            toastInfo("Recording started. Press " + recordShortcut + " to finish.")
         } else if (event === "ready" && fields[1]) {
             completionPanel.openFor(fields[1], Number(fields[2]) || 0)
         } else if (event === "cancelled") {
