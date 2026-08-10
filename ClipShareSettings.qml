@@ -3,7 +3,7 @@ import Quickshell.Io
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
-import qs.Widgets
+import "./dms-common"
 
 PluginSettings {
     id: root
@@ -43,116 +43,165 @@ PluginSettings {
         onExited: exitCode => {
             if (exitCode === 0) {
                 root.appliedRecordShortcut = root.pendingRecordShortcut
-                ToastService.showInfo("Recording shortcut updated")
+                ToastService.showInfo(I18n.tr("Recording shortcut updated"))
             } else {
                 root.saveValue("recordShortcut", root.appliedRecordShortcut)
-                ToastService.showError(errorText || "Could not update recording shortcut")
+                ToastService.showError(errorText || I18n.tr("Could not update recording shortcut"))
             }
             root.pendingRecordShortcut = ""
         }
     }
 
-    StyledText {
-        width: parent.width
-        text: "ClipShare"
-        font.pixelSize: Theme.fontSizeLarge
-        font.weight: Font.Bold
-        color: Theme.surfaceText
+    SettingsCard {
+        SectionTitle {
+            text: I18n.tr("Recording")
+            icon: "videocam"
+            showReset: compressionMode.isDirty || compressionLimitMb.isDirty || recordShortcut.isDirty || recordingDirectory.isDirty
+            onResetClicked: {
+                compressionMode.resetToDefault()
+                compressionLimitMb.resetToDefault()
+                recordShortcut.resetToDefault()
+                recordingDirectory.resetToDefault()
+            }
+        }
+
+        SelectionSettingPlus {
+            id: compressionMode
+            settingKey: "compressionMode"
+            label: I18n.tr("Compression Mode")
+            description: I18n.tr("Balanced is faster with a small quality tradeoff. Best quality is slower. Fast GPU prioritizes speed.")
+            defaultValue: "balanced"
+            options: [
+                { label: I18n.tr("Best Quality"), value: "best" },
+                { label: I18n.tr("Balanced"), value: "balanced" },
+                { label: I18n.tr("Fast GPU"), value: "gpu" }
+            ]
+        }
+
+        Separator {}
+
+        SliderSettingPlus {
+            id: compressionLimitMb
+            settingKey: "compressionLimitMb"
+            label: I18n.tr("Compression Size Limit")
+            description: I18n.tr("Recordings below this size are copied without recompression. Larger recordings are compressed below the limit.")
+            defaultValue: 10
+            minimum: 1
+            maximum: 100
+            unit: "MB"
+            leftLabel: "1 MB"
+            rightLabel: "100 MB"
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: recordShortcut
+            settingKey: "recordShortcut"
+            label: I18n.tr("Start or Stop Recording Shortcut")
+            description: I18n.tr("Use Niri, Hyprland, or MangoWC shortcut syntax, such as Shift+Print or Mod+Print. Existing shortcuts cannot be replaced.")
+            defaultValue: "Shift+Print"
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: recordingDirectory
+            settingKey: "recordingDirectory"
+            label: I18n.tr("Recording Folder")
+            description: I18n.tr("Use an absolute path or a path starting with ~/. The folder is created automatically.")
+            defaultValue: "~/Videos/ClipShare"
+            isDirectory: true
+        }
     }
 
-    StyledText {
-        width: parent.width
-        text: "Choose how recordings are compressed and where progress appears."
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.surfaceVariantText
-        wrapMode: Text.WordWrap
+    SettingsCard {
+        SectionTitle {
+            text: I18n.tr("Sharing and Shortcuts")
+            icon: "share"
+            showReset: uploadMode.isDirty || copyShortcut.isDirty || compressShortcut.isDirty || shareShortcut.isDirty || discardShortcut.isDirty
+            onResetClicked: {
+                uploadMode.resetToDefault()
+                copyShortcut.resetToDefault()
+                compressShortcut.resetToDefault()
+                shareShortcut.resetToDefault()
+                discardShortcut.resetToDefault()
+            }
+        }
+
+        SelectionSettingPlus {
+            id: uploadMode
+            settingKey: "uploadMode"
+            label: I18n.tr("Upload Mode")
+            description: I18n.tr("Catbox only copies the direct video URL. Catbox with Autocompressor creates a short embed link with a thumbnail.")
+            defaultValue: "embed"
+            options: [
+                { label: I18n.tr("Catbox with Autocompressor"), value: "embed" },
+                { label: I18n.tr("Catbox Only"), value: "catbox" }
+            ]
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: copyShortcut
+            settingKey: "copyShortcut"
+            label: I18n.tr("Copy Shortcut")
+            description: I18n.tr("Use one key, such as Enter or C.")
+            defaultValue: "Enter"
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: compressShortcut
+            settingKey: "compressShortcut"
+            label: I18n.tr("Compress Shortcut")
+            description: I18n.tr("Use one key, such as Space or K.")
+            defaultValue: "Space"
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: shareShortcut
+            settingKey: "shareShortcut"
+            label: I18n.tr("Share Shortcut")
+            description: I18n.tr("Use two keys joined by +, such as Space+Enter.")
+            defaultValue: "Space+Enter"
+        }
+
+        Separator {}
+
+        StringSettingPlus {
+            id: discardShortcut
+            settingKey: "discardShortcut"
+            label: I18n.tr("Discard Shortcut")
+            description: I18n.tr("Use one key, such as Escape or Delete.")
+            defaultValue: "Escape"
+        }
     }
 
-    SelectionSetting {
-        settingKey: "compressionMode"
-        label: "Compression mode"
-        description: "Balanced is faster with a small quality tradeoff. Best quality is slower. Fast GPU prioritizes speed."
-        defaultValue: "balanced"
-        options: [
-            { label: "Best quality", value: "best" },
-            { label: "Balanced", value: "balanced" },
-            { label: "Fast GPU", value: "gpu" }
-        ]
-    }
+    SettingsCard {
+        SectionTitle {
+            text: I18n.tr("Progress Display")
+            icon: "picture_in_picture_alt"
+            showReset: progressPosition.isDirty
+            onResetClicked: progressPosition.resetToDefault()
+        }
 
-    SliderSetting {
-        settingKey: "compressionLimitMb"
-        label: "Compression size limit"
-        description: "Recordings below this size are copied without recompression. Larger recordings are compressed below the limit."
-        defaultValue: 10
-        minimum: 1
-        maximum: 100
-        unit: "MB"
-    }
-
-    SelectionSetting {
-        settingKey: "uploadMode"
-        label: "Upload mode"
-        description: "Catbox only copies the direct video URL. Catbox + Autocompressor creates a short embed link with a thumbnail."
-        defaultValue: "embed"
-        options: [
-            { label: "Catbox + Autocompressor", value: "embed" },
-            { label: "Catbox only", value: "catbox" }
-        ]
-    }
-
-    StringSetting {
-        settingKey: "recordShortcut"
-        label: "Start/stop recording shortcut"
-        description: "Niri, Hyprland, or MangoWC shortcut syntax, such as Shift+Print or Mod+Print. Existing shortcuts cannot be replaced."
-        defaultValue: "Shift+Print"
-    }
-
-    StringSetting {
-        settingKey: "recordingDirectory"
-        label: "Recording folder"
-        description: "Use an absolute path or a path starting with ~/. The folder is created automatically."
-        defaultValue: "~/Videos/ClipShare"
-    }
-
-    StringSetting {
-        settingKey: "copyShortcut"
-        label: "Copy shortcut"
-        description: "One key, such as Enter or C."
-        defaultValue: "Enter"
-    }
-
-    StringSetting {
-        settingKey: "compressShortcut"
-        label: "Compress shortcut"
-        description: "One key, such as Space or K."
-        defaultValue: "Space"
-    }
-
-    StringSetting {
-        settingKey: "shareShortcut"
-        label: "Share shortcut"
-        description: "Two keys joined by +, such as Space+Enter."
-        defaultValue: "Space+Enter"
-    }
-
-    StringSetting {
-        settingKey: "discardShortcut"
-        label: "Discard shortcut"
-        description: "One key, such as Escape or Delete."
-        defaultValue: "Escape"
-    }
-
-    SelectionSetting {
-        settingKey: "progressPosition"
-        label: "Progress position"
-        description: "The corner used by the non-blocking progress HUD."
-        defaultValue: "top-right"
-        options: [
-            { label: "Top right", value: "top-right" },
-            { label: "Top left", value: "top-left" },
-            { label: "Bottom right", value: "bottom-right" },
-            { label: "Bottom left", value: "bottom-left" }
-        ]
+        SelectionSettingPlus {
+            id: progressPosition
+            settingKey: "progressPosition"
+            label: I18n.tr("Progress Position")
+            description: I18n.tr("Choose the corner used by the non-blocking progress display.")
+            defaultValue: "top-right"
+            options: [
+                { label: I18n.tr("Top Right"), value: "top-right" },
+                { label: I18n.tr("Top Left"), value: "top-left" },
+                { label: I18n.tr("Bottom Right"), value: "bottom-right" },
+                { label: I18n.tr("Bottom Left"), value: "bottom-left" }
+            ]
+        }
     }
 }
