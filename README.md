@@ -90,3 +90,5 @@ qmllint ClipShareDaemon.qml ClipShareModal.qml ClipShareProgress.qml ClipShareSe
 ## License
 
 MIT
+
+The settings UI uses selected components from [dms-common](https://github.com/hthienloc/dms-common) by Loc Huynh.
