@@ -84,6 +84,7 @@ The compression size limit is configurable from 1-100 MB and defaults to 10 MB.
 bash tests/clipshare-record.test.sh
 bash tests/clipshare-process.test.sh
 bash tests/clipshare-keybind.test.sh
+bash tests/clipshare-copy.test.sh
 qmllint ClipShareDaemon.qml ClipShareModal.qml ClipShareProgress.qml ClipShareSettings.qml
 ```
 
