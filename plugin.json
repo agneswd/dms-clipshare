@@ -3,7 +3,7 @@
   "id": "clipShare",
   "name": "ClipShare",
   "description": "Record a screen region and choose how to share the finished clip.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "author": "agneswd",
   "license": "MIT",
   "icon": "videocam",

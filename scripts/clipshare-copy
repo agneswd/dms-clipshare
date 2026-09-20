@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -u
+
+# Copy a local file as a file:// URI, or copy short text.
+# DMS clipboard.copyFile rejects files above maxEntrySize, reads the whole
+# file into the clipboard database, and can leave the clipboard manager stuck.
+# dms clipboard copy opens its own Wayland connection and does not need that
+# manager.
+
+dms_bin="${DMS_BIN:-dms}"
+wl_copy_bin="${WL_COPY_BIN:-wl-copy}"
+jq_bin="${JQ_BIN:-jq}"
+
+fail() {
+    printf '%s\n' "$1" >&2
+    exit 1
+}
+
+file_uri() {
+    local path="$1"
+    local encoded
+    encoded="$(printf '%s' "$path" | "$jq_bin" -sRr 'split("/") | map(@uri) | join("/")')" \
+        || fail "Could not encode file path"
+    printf 'file://%s' "$encoded"
+}
+
+copy_mime() {
+    local mime="$1"
+    local data="$2"
+    local dms_err wl_err
+
+    if dms_err="$(printf '%s' "$data" | "$dms_bin" clipboard copy -t "$mime" 2>&1)"; then
+        return 0
+    fi
+
+    if wl_err="$(printf '%s' "$data" | "$wl_copy_bin" -t "$mime" 2>&1)"; then
+        return 0
+    fi
+
+    fail "${dms_err:-${wl_err:-Could not copy to the clipboard}}"
+}
+
+copy_file() {
+    local path="${2:-}"
+    case "$path" in
+        /*) ;;
+        *) fail "Expected an absolute file path" ;;
+    esac
+    [ -f "$path" ] || fail "Recording is missing"
+    [ -s "$path" ] || fail "Recording is empty"
+
+    local uri
+    uri="$(file_uri "$path")" || exit 1
+    copy_mime "text/uri-list" "${uri}"$'\r\n'
+}
+
+copy_text() {
+    local text="${2:-}"
+    [ -n "$text" ] || fail "No text to copy"
+    copy_mime "text/plain;charset=utf-8" "$text"
+}
+
+case "${1:-}" in
+    copy-file)
+        copy_file "$@"
+        ;;
+    copy-text)
+        copy_text "$@"
+        ;;
+    *)
+        fail "Usage: clipshare-copy copy-file <absolute-path> | copy-text <text>"
+        ;;
+esac

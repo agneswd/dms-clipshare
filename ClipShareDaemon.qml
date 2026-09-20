@@ -20,6 +20,12 @@ PluginComponent {
     property bool recordErrorReported: false
     property string discardError: ""
     property var discardCallback: null
+    property var copyCallback: null
+    property string copyKind: ""
+    property string copyError: ""
+    property bool copyActive: false
+    property bool copyTimedOut: false
+    property string pendingShareUrl: ""
     property string compressionStage: ""
     property int compressionProgress: 0
     property string compressionResult: ""
@@ -104,38 +110,69 @@ PluginComponent {
         }
     }
 
-    function copyLocalFile(path, callback) {
-        if (!path) {
-            callback(false)
+    function finishCopy(success) {
+        if (!copyActive)
+            return
+
+        const callback = copyCallback
+        const kind = copyKind
+        const errorText = copyTimedOut ? "Clipboard copy timed out" : copyError
+        copyActive = false
+        copyTimedOut = false
+        copyCallback = null
+        copyKind = ""
+        copyTimeout.stop()
+        if (success) {
+            pendingShareUrl = ""
+            toastInfo(kind === "text" ? "Share link copied to clipboard" : "Recording copied to clipboard")
+        } else {
+            toastError(errorText || (kind === "text" ? "Could not copy the share link" : "Could not copy the recording to the clipboard"))
+        }
+        if (typeof callback === "function")
+            callback(success)
+    }
+
+    function startCopy(kind, args, callback) {
+        if (copyProcess.running || copyActive) {
+            if (typeof callback === "function")
+                callback(false)
             return
         }
 
-        DMSService.sendRequest("clipboard.copyFile", { "filePath": path }, response => {
-            if (response && response.error) {
-                toastError("Could not copy the recording to the clipboard")
+        copyError = ""
+        copyTimedOut = false
+        copyKind = kind
+        copyCallback = callback
+        copyActive = true
+        copyProcess.command = ["bash", pluginDir + "scripts/clipshare-copy"].concat(args)
+        copyProcess.running = true
+        copyTimeout.restart()
+    }
+
+    function copyLocalFile(path, callback) {
+        if (!path) {
+            if (typeof callback === "function")
                 callback(false)
-                return
-            }
-            toastInfo("Recording copied to clipboard")
-            callback(true)
-        })
+            return
+        }
+
+        startCopy("file", ["copy-file", path], callback)
     }
 
     function copyText(text, callback) {
-        DMSService.sendRequest("clipboard.copy", { "text": text }, response => {
-            if (response && response.error) {
-                toastError("Could not copy the share link")
+        if (!text) {
+            if (typeof callback === "function")
                 callback(false)
-                return
-            }
-            toastInfo("Share link copied to clipboard")
-            callback(true)
-        })
+            return
+        }
+
+        startCopy("text", ["copy-text", text], callback)
     }
 
     function discardLocalFile(path, callback) {
         if (!path || discardProcess.running) {
-            callback(false)
+            if (typeof callback === "function")
+                callback(false)
             return
         }
 
@@ -203,7 +240,42 @@ PluginComponent {
     }
 
     function reopenFailedOperation() {
-        if (operationState !== "error" || !operationFilePath)
+        if (operationState !== "error")
+            return
+
+        if (pendingShareUrl) {
+            operationState = "working"
+            compressionStage = "copying-link"
+            copyText(pendingShareUrl, success => {
+                if (!success) {
+                    compressionError = "The upload succeeded, but clipboard copy failed. Link: " + pendingShareUrl
+                    operationState = "error"
+                    return
+                }
+                operationState = "success"
+                successHideTimer.restart()
+            })
+            return
+        }
+
+        if (operationKind === "compression" && operationFilePath) {
+            operationState = "working"
+            compressionStage = "copying-file"
+            copyLocalFile(operationFilePath, success => {
+                if (!success) {
+                    compressionError = copyError
+                        ? "The compressed recording is safe, but clipboard copy failed: " + copyError
+                        : "The compressed recording is safe, but clipboard copy failed"
+                    operationState = "error"
+                    return
+                }
+                operationState = "success"
+                successHideTimer.restart()
+            })
+            return
+        }
+
+        if (!operationFilePath)
             return
         const message = compressionError
         operationState = "idle"
@@ -249,11 +321,42 @@ PluginComponent {
             root.discardCallback = null
             if (exitCode === 0) {
                 root.toastInfo("Recording discarded")
-                callback(true)
+                if (typeof callback === "function")
+                    callback(true)
                 return
             }
             root.toastError(root.discardError || "Could not discard recording")
-            callback(false)
+            if (typeof callback === "function")
+                callback(false)
+        }
+    }
+
+    Process {
+        id: copyProcess
+        running: false
+
+        stderr: StdioCollector {
+            id: copyStderr
+            onStreamFinished: root.copyError = text.trim()
+        }
+
+        onExited: exitCode => {
+            if (!root.copyError)
+                root.copyError = copyStderr.text.trim()
+            root.finishCopy(exitCode === 0 && !root.copyTimedOut)
+        }
+    }
+
+    Timer {
+        id: copyTimeout
+        interval: 8000
+        repeat: false
+        onTriggered: {
+            if (!copyProcess.running)
+                return
+            root.copyTimedOut = true
+            copyProcess.running = false
+            root.finishCopy(false)
         }
     }
 
@@ -285,7 +388,9 @@ PluginComponent {
             root.operationFileSize = root.compressionResultSize
             root.copyLocalFile(result, success => {
                 if (!success) {
-                    root.compressionError = "The compressed recording is safe, but clipboard copy failed"
+                    root.compressionError = root.copyError
+                        ? "The compressed recording is safe, but clipboard copy failed: " + root.copyError
+                        : "The compressed recording is safe, but clipboard copy failed"
                     root.operationState = "error"
                     return
                 }
@@ -323,8 +428,10 @@ PluginComponent {
         }
 
         onRunningChanged: {
-            if (running)
+            if (running) {
                 resultUrl = ""
+                root.pendingShareUrl = ""
+            }
         }
 
         onExited: exitCode => {
@@ -333,10 +440,11 @@ PluginComponent {
                 root.operationState = "error"
                 return
             }
+            root.pendingShareUrl = resultUrl
             root.compressionStage = "copying-link"
             root.copyText(resultUrl, success => {
                 if (!success) {
-                    root.compressionError = "The upload succeeded, but clipboard copy failed"
+                    root.compressionError = "The upload succeeded, but clipboard copy failed. Link: " + resultUrl
                     root.operationState = "error"
                     return
                 }
